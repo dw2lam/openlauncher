@@ -1,0 +1,3 @@
+-keepattributes *Annotation*
+-keep class com.openlauncher.app.data.** { *; }
+-keep class com.openlauncher.app.model.** { *; }

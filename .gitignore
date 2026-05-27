@@ -1,0 +1,30 @@
+# Built artifacts
+**/build/
+*.apk
+*.aar
+*.ap_
+*.aab
+
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+.navigation/
+
+# Gradle
+.gradle/
+build/
+local.properties
+
+# OS generated
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Kotlin
+.kotlin/

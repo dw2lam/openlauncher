@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Open Launcher</string>
+    <string name="settings_label">Open Launcher Settings</string>
+    <string name="media_label">Open Launcher Media</string>
+</resources>
