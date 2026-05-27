@@ -44,11 +44,13 @@ This project is currently in active development, but the core foundation is high
 <img width="2400" height="896" alt="Screenshot_20260527-025446" src="https://github.com/user-attachments/assets/b079208f-acac-4d3f-80c5-a7ea59f3e6bf" />
 <img width="2400" height="896" alt="Screenshot_20260527-025451" src="https://github.com/user-attachments/assets/cc038c53-dcf5-4b4b-bd73-bfcd18bd82d2" />
 
-
-* **Customizable Left Sidebar:** Add, swap, and rearrange your most-used app shortcuts on the fly.
-* **Modular Home Dashboard:** A dynamic widget system with pre-made widget panes that you can resize, rearrange, and toggle on or off.
-* **Deep Personalization:** Customize the UI to match your interior lighting. Change UI accent colors, swap out background canvases, or use your own custom background images.
-* **Offline-Optimized:** Designed to look good and function smoothly even when the head unit is completely disconnected from the internet.
+* **Draggable, Customizable Shortcuts:** The left sidebar holds your main app shortcuts. You can easily remap them and drag them around to rearrange the order on the fly.
+* **Deep System App Access:** Pulls *every* Android app on the device. Many head units hide their built-in CarPlay/Android Auto receiver apps down at the system level (which a lot of alternative launchers fail to find). This launcher pulls them directly so you can actually link to them.
+* **Context-Aware Widgets:**
+  * **Smart Music Player:** If you are playing music directly on the head unit (local files or native Spotify), it pulls track metadata and album art. If your CarPlay/AA app is open, the widget smartly recognizes that (if you've set your Carplay/AA app) and switches into a shortcut mode instead.
+  * **Dynamic Weather:** Auto-detects your internet connection. If data/Wi-Fi is on, it pulls and displays the weather. If you are offline, it auto-hides so you aren't staring at a blank or broken widget.
+* **Modular Home Grid:** Resize, rearrange, and toggle the core dashboard widgets (Clock, Telemetry, and GPS/Compass) to fit your layout preference.
+* **Deep Personalization:** Change UI accent colors, swap background canvases, and tweak the aesthetic to match your car's specific dashboard lighting.
 
 ---
 
