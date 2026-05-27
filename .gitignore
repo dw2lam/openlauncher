@@ -4,6 +4,8 @@
 *.aar
 *.ap_
 *.aab
+release/
+
 
 # Android Studio / IntelliJ IDEA
 .idea/
