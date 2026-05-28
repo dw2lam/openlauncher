@@ -58,16 +58,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         hideSystemBars()
 
-        locationPermissions.launch(
-            arrayOf(
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-            )
-        )
-
         setContent {
-            val settings    by vm.settings.collectAsStateWithLifecycle()
-            val nav         by vm.nav.collectAsStateWithLifecycle()
+            val settingsLoaded by vm.settingsLoaded.collectAsStateWithLifecycle()
+            val settings       by vm.settings.collectAsStateWithLifecycle()
+            val nav            by vm.nav.collectAsStateWithLifecycle()
             val apps        by vm.apps.collectAsStateWithLifecycle()
             val appsLoading by vm.appsLoading.collectAsStateWithLifecycle()
             val nowPlaying  by vm.nowPlaying.collectAsStateWithLifecycle()
@@ -96,7 +90,9 @@ class MainActivity : ComponentActivity() {
                     fontScale = baseDensity.fontScale
                 )
             ) {
-            OpenLauncherTheme(
+            if (!settingsLoaded) {
+                Box(modifier = Modifier.fillMaxSize().background(Color.Black))
+            } else OpenLauncherTheme(
                 accent     = accent,
                 background = bg,
                 fontBold   = settings.fontBold,
@@ -104,140 +100,162 @@ class MainActivity : ComponentActivity() {
                 appFont    = settings.appFont,
                 isDayMode  = isDayMode
             ) {
-                Box(modifier = Modifier.fillMaxSize().let { m ->
-                    if (bgBrush != null) m.background(bgBrush) else m.background(bg)
-                }) {
-                    // Optional wallpaper layer
-                    if (settings.wallpaperUri.isNotEmpty()) {
-                        AsyncImage(
-                            model              = android.net.Uri.parse(settings.wallpaperUri),
-                            contentDescription = null,
-                            contentScale       = androidx.compose.ui.layout.ContentScale.Crop,
-                            modifier           = Modifier.fillMaxSize()
-                        )
-                        Box(modifier = Modifier.fillMaxSize()
-                            .background(Color.Black.copy(alpha = settings.wallpaperDim)))
-                    }
+                if (!settings.onboardingCompleted) {
+                    OnboardingScreen(
+                        accent = accent,
+                        onComplete = {
+                            vm.updateSettings { copy(onboardingCompleted = true) }
+                            // Start location updates immediately upon completion
+                            vm.startLocationUpdates()
+                        }
+                    )
+                } else {
+                    Box(modifier = Modifier.fillMaxSize().let { m ->
+                        if (bgBrush != null) m.background(bgBrush) else m.background(bg)
+                    }) {
+                        // Optional wallpaper layer
+                        if (settings.wallpaperUri.isNotEmpty()) {
+                            AsyncImage(
+                                model              = android.net.Uri.parse(settings.wallpaperUri),
+                                contentDescription = null,
+                                contentScale       = androidx.compose.ui.layout.ContentScale.Crop,
+                                modifier           = Modifier.fillMaxSize()
+                            )
+                            Box(modifier = Modifier.fillMaxSize()
+                                .background(Color.Black.copy(alpha = settings.wallpaperDim)))
+                        }
 
-                    val isBottomBar    = settings.sidebarPosition == SidebarPosition.BOTTOM
-                    val layoutDivColor = if (isDayMode) Color(0xFFCCCCCC) else Color(0xFF1A1A1A)
+                        val isBottomBar    = settings.sidebarPosition == SidebarPosition.BOTTOM
+                        val layoutDivColor = if (isDayMode) Color(0xFFCCCCCC) else Color(0xFF1A1A1A)
 
-                    val sidebarContent: @Composable () -> Unit = {
-                        Sidebar(
-                            currentDest   = nav,
-                            settings      = settings,
-                            isHorizontal  = isBottomBar,
-                            installedIconFor = { pkg ->
-                                apps.find { it.packageName == pkg }?.icon
-                            },
-                            onNavigate    = { dest ->
-                                vm.cancelShortcutPicker()
-                                vm.cancelCarPlayPicker()
-                                vm.exitRearrangeMode()
-                                vm.navigate(dest)
-                            },
-                            onShortcutClick = { slot ->
-                                val shortcut = settings.shortcuts[slot]
-                                if (shortcut.packageName.isNotEmpty()) {
-                                    vm.launchApp(shortcut.packageName)
+                        val sidebarContent: @Composable () -> Unit = {
+                            val sidebarDensity = Density(
+                                density = baseDensity.density * (1.0f + (settings.uiScale - 1.0f) * 0.35f),
+                                fontScale = baseDensity.fontScale
+                            )
+                            CompositionLocalProvider(LocalDensity provides sidebarDensity) {
+                                Sidebar(
+                                    currentDest   = nav,
+                                    settings      = settings,
+                                    isHorizontal  = isBottomBar,
+                                    installedIconFor = { pkg ->
+                                        apps.find { it.packageName == pkg }?.icon
+                                    },
+                                    onNavigate    = { dest ->
+                                        vm.cancelShortcutPicker()
+                                        vm.cancelCarPlayPicker()
+                                        vm.exitRearrangeMode()
+                                        vm.navigate(dest)
+                                    },
+                                    onShortcutClick = { slot ->
+                                        val shortcut = settings.shortcuts[slot]
+                                        if (shortcut.packageName.isNotEmpty()) {
+                                            vm.launchApp(shortcut.packageName)
+                                        }
+                                    },
+                                    onShortcutLongPress  = { slot -> vm.startShortcutPicker(slot) },
+                                    onShortcutRemove     = { slot -> vm.removeShortcut(slot) },
+                                    onShortcutSetIcon    = { slot, icon -> vm.setShortcutIcon(slot, icon) },
+                                    onReorder            = { from, to -> vm.reorderShortcut(from, to) }
+                                )
+                            }
+                        }
+
+                        val mainPane: @Composable (Modifier) -> Unit = { paneModifier ->
+                            // ── Main content pane ─────────────────────────────
+                            AnimatedContent(
+                                targetState   = nav,
+                                transitionSpec = {
+                                    fadeIn() + slideInHorizontally { it / 10 } togetherWith
+                                    fadeOut() + slideOutHorizontally { -it / 10 }
+                                },
+                                modifier = paneModifier,
+                                label    = "pane_transition"
+                            ) { destination ->
+                                when (destination) {
+                                    NavDestination.HOME -> HomeScreen(
+                                        settings            = settings,
+                                        weather             = weather,
+                                        nowPlaying          = nowPlaying,
+                                        location            = location,
+                                        bearing             = bearing,
+                                        isWifi              = isWifi,
+                                        isData              = isData,
+                                        isDayMode           = isDayMode,
+                                        onPlayPause         = vm::playPause,
+                                        onNext              = vm::skipNext,
+                                        onPrev              = vm::skipPrev,
+                                        onLaunchCarPlay     = { vm.launchApp(settings.carPlayPackage) },
+                                        onLaunchAndroidAuto = { vm.launchApp(settings.androidAutoPackage) },
+                                        onAssignCarPlay     = { vm.startCarPlayPicker() },
+                                        onAssignAndroidAuto = { vm.startAndroidAutoPicker() },
+                                        onClearCarPlay      = { vm.clearCarPlayApp() },
+                                        onClearAndroidAuto  = { vm.clearAndroidAutoApp() },
+                                        onAssignPip         = { vm.startPipPicker() },
+                                        onClearPip          = { vm.clearPipApp() },
+                                        onLaunchPip         = { vm.launchApp(settings.pipAppPackage) },
+                                        onTapNowPlaying     = {
+                                            val pkg = nowPlaying?.controller?.packageName
+                                            if (!pkg.isNullOrEmpty()) vm.launchApp(pkg)
+                                        },
+                                        onUpdateWidget      = { id, sx, sy -> vm.updateWidgetConfig(id, sx, sy) },
+                                        onMoveWidget        = { id, gx, gy -> vm.moveWidgetConfig(id, gx, gy) },
+                                        onAddWidget         = { id -> vm.addWidget(id) },
+                                        onRemoveWidget      = { id -> vm.removeWidget(id) },
+                                        onSetClockStyle     = { style -> vm.updateSettings { copy(clockStyle = style) } },
+                                        onUpdateSoundPad    = { idx, pad -> vm.updateSoundboardPad(idx, pad) }
+                                    )
+
+                                    NavDestination.APP_LIBRARY -> AppLibraryScreen(
+                                        apps                = apps,
+                                        isLoading           = appsLoading,
+                                        isPickerMode        = pickerSlot != null,
+                                        pickerSlot          = pickerSlot,
+                                        isCarPlayPickerMode = appPickerTarget != null,
+                                        carPlayPickerLabel  = when (appPickerTarget) {
+                                            com.openlauncher.app.viewmodel.LauncherViewModel.AppPickerTarget.ANDROID_AUTO -> "CHOOSE ANDROID AUTO APP"
+                                            com.openlauncher.app.viewmodel.LauncherViewModel.AppPickerTarget.PIP          -> "CHOOSE PIP APP"
+                                            else -> "CHOOSE CARPLAY APP"
+                                        },
+                                        accent              = accent,
+                                        onAppClick          = { app -> vm.launchApp(app.packageName) },
+                                        onPickerSelect      = { slot, app -> vm.assignShortcut(slot, app) },
+                                        onCarPlaySelect     = { app -> vm.assignPickerApp(app) }
+                                    )
+
+                                    NavDestination.SETTINGS -> SettingsScreen(
+                                        settings = settings,
+                                        accent   = accent,
+                                        onUpdate = { block -> vm.updateSettings(block) },
+                                        onReset  = { vm.resetSettings() }
+                                    )
                                 }
-                            },
-                            onShortcutLongPress  = { slot -> vm.startShortcutPicker(slot) },
-                            onShortcutRemove     = { slot -> vm.removeShortcut(slot) },
-                            onShortcutSetIcon    = { slot, icon -> vm.setShortcutIcon(slot, icon) },
-                            onReorder            = { from, to -> vm.reorderShortcut(from, to) }
-                        )
-                    }
-
-                    val mainPane: @Composable (Modifier) -> Unit = { paneModifier ->
-                        // ── Main content pane ─────────────────────────────
-                        AnimatedContent(
-                            targetState   = nav,
-                            transitionSpec = {
-                                fadeIn() + slideInHorizontally { it / 10 } togetherWith
-                                fadeOut() + slideOutHorizontally { -it / 10 }
-                            },
-                            modifier = paneModifier,
-                            label    = "pane_transition"
-                        ) { destination ->
-                            when (destination) {
-                                NavDestination.HOME -> HomeScreen(
-                                    settings            = settings,
-                                    weather             = weather,
-                                    nowPlaying          = nowPlaying,
-                                    location            = location,
-                                    bearing             = bearing,
-                                    isWifi              = isWifi,
-                                    isData              = isData,
-                                    isDayMode           = isDayMode,
-                                    onPlayPause         = vm::playPause,
-                                    onNext              = vm::skipNext,
-                                    onPrev              = vm::skipPrev,
-                                    onLaunchCarPlay     = { vm.launchApp(settings.carPlayPackage) },
-                                    onLaunchAndroidAuto = { vm.launchApp(settings.androidAutoPackage) },
-                                    onAssignCarPlay     = { vm.startCarPlayPicker() },
-                                    onAssignAndroidAuto = { vm.startAndroidAutoPicker() },
-                                    onClearCarPlay      = { vm.clearCarPlayApp() },
-                                    onClearAndroidAuto  = { vm.clearAndroidAutoApp() },
-                                    onTapNowPlaying     = {
-                                        val pkg = nowPlaying?.controller?.packageName
-                                        if (!pkg.isNullOrEmpty()) vm.launchApp(pkg)
-                                    },
-                                    onUpdateWidget      = { id, sx, sy -> vm.updateWidgetConfig(id, sx, sy) },
-                                    onMoveWidget        = { id, gx, gy -> vm.moveWidgetConfig(id, gx, gy) },
-                                    onAddWidget         = { id -> vm.addWidget(id) },
-                                    onRemoveWidget      = { id -> vm.removeWidget(id) },
-                                    onSetClockStyle     = { style -> vm.updateSettings { copy(clockStyle = style) } }
-                                )
-
-                                NavDestination.APP_LIBRARY -> AppLibraryScreen(
-                                    apps                = apps,
-                                    isLoading           = appsLoading,
-                                    isPickerMode        = pickerSlot != null,
-                                    pickerSlot          = pickerSlot,
-                                    isCarPlayPickerMode = appPickerTarget != null,
-                                    carPlayPickerLabel  = when (appPickerTarget) {
-                                        com.openlauncher.app.viewmodel.LauncherViewModel.AppPickerTarget.ANDROID_AUTO -> "CHOOSE ANDROID AUTO APP"
-                                        else -> "CHOOSE CARPLAY APP"
-                                    },
-                                    accent              = accent,
-                                    onAppClick          = { app -> vm.launchApp(app.packageName) },
-                                    onPickerSelect      = { slot, app -> vm.assignShortcut(slot, app) },
-                                    onCarPlaySelect     = { app -> vm.assignPickerApp(app) }
-                                )
-
-                                NavDestination.SETTINGS -> SettingsScreen(
-                                    settings = settings,
-                                    accent   = accent,
-                                    onUpdate = { block -> vm.updateSettings(block) },
-                                    onReset  = { vm.resetSettings() }
-                                )
                             }
                         }
-                    }
 
-                    if (isBottomBar) {
-                        Column(modifier = Modifier.fillMaxSize()) {
-                            mainPane(Modifier.weight(1f).fillMaxWidth())
-                            androidx.compose.material3.HorizontalDivider(color = layoutDivColor)
-                            sidebarContent()
-                        }
-                    } else {
-                        Row(modifier = Modifier.fillMaxSize()) {
-                            val vDivider: @Composable () -> Unit = {
-                                androidx.compose.material3.VerticalDivider(
-                                    modifier = Modifier.fillMaxHeight(),
-                                    color    = layoutDivColor
-                                )
-                            }
-                            if (settings.sidebarPosition == SidebarPosition.LEFT) {
+                        if (isBottomBar) {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                mainPane(Modifier.weight(1f).fillMaxWidth())
+                                androidx.compose.material3.HorizontalDivider(color = layoutDivColor)
                                 sidebarContent()
-                                vDivider()
                             }
-                            mainPane(Modifier.weight(1f).fillMaxHeight())
-                            if (settings.sidebarPosition == SidebarPosition.RIGHT) {
-                                vDivider()
-                                sidebarContent()
+                        } else {
+                            Row(modifier = Modifier.fillMaxSize()) {
+                                val vDivider: @Composable () -> Unit = {
+                                    androidx.compose.material3.VerticalDivider(
+                                        modifier = Modifier.fillMaxHeight(),
+                                        color    = layoutDivColor
+                                    )
+                                }
+                                if (settings.sidebarPosition == SidebarPosition.LEFT) {
+                                    sidebarContent()
+                                    vDivider()
+                                }
+                                mainPane(Modifier.weight(1f).fillMaxHeight())
+                                if (settings.sidebarPosition == SidebarPosition.RIGHT) {
+                                    vDivider()
+                                    sidebarContent()
+                                }
                             }
                         }
                     }

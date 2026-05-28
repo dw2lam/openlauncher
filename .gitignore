@@ -4,8 +4,16 @@
 *.aar
 *.ap_
 *.aab
-release/
 
+# Release directory — binaries ignored, release notes tracked
+release/*.apk
+release/*.zip
+release/*.aab
+
+# Signing keys — never commit
+*.jks
+*.keystore
+keystore/
 
 # Android Studio / IntelliJ IDEA
 .idea/

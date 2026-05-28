@@ -14,6 +14,7 @@ import com.openlauncher.app.data.GRID_COLS
 import com.openlauncher.app.data.GRID_ROWS
 import com.openlauncher.app.data.SettingsRepository
 import com.openlauncher.app.data.ShortcutConfig
+import com.openlauncher.app.data.SoundPadConfig
 import com.openlauncher.app.data.WeatherApi
 import com.openlauncher.app.data.activeWidgetIds
 import com.openlauncher.app.data.computeWidgetMove
@@ -35,8 +36,12 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private val locationMgr  = LocationCompassManager(application)
 
     // ── Settings ──────────────────────────────────────────────────────────────
+    private val _settingsLoaded = MutableStateFlow(false)
+    val settingsLoaded: StateFlow<Boolean> = _settingsLoaded
+
     val settings: StateFlow<AppSettings> = settingsRepo.settingsFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppSettings())
+        .onEach { _settingsLoaded.value = true }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
 
     fun updateSettings(block: AppSettings.() -> AppSettings) {
         viewModelScope.launch { settingsRepo.saveSettings(settings.value.block()) }
@@ -101,7 +106,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     }
 
     // ── CarPlay / Android Auto picker ─────────────────────────────────────────
-    enum class AppPickerTarget { CARPLAY, ANDROID_AUTO }
+    enum class AppPickerTarget { CARPLAY, ANDROID_AUTO, PIP }
 
     private val _appPickerTarget = MutableStateFlow<AppPickerTarget?>(null)
     val carPlayPickerActive: StateFlow<Boolean> get() = MutableStateFlow(false) // kept for compat
@@ -117,10 +122,16 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         _nav.value = NavDestination.APP_LIBRARY
     }
 
+    fun startPipPicker() {
+        _appPickerTarget.value = AppPickerTarget.PIP
+        _nav.value = NavDestination.APP_LIBRARY
+    }
+
     fun assignPickerApp(app: AppInfo) {
         when (_appPickerTarget.value) {
             AppPickerTarget.CARPLAY      -> updateSettings { copy(carPlayPackage = app.packageName) }
             AppPickerTarget.ANDROID_AUTO -> updateSettings { copy(androidAutoPackage = app.packageName) }
+            AppPickerTarget.PIP          -> updateSettings { copy(pipAppPackage = app.packageName) }
             null -> {}
         }
         _appPickerTarget.value = null
@@ -129,6 +140,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     fun clearCarPlayApp()      { updateSettings { copy(carPlayPackage = "") } }
     fun clearAndroidAutoApp()  { updateSettings { copy(androidAutoPackage = "") } }
+    fun clearPipApp()          { updateSettings { copy(pipAppPackage = "") } }
 
     fun updateWidgetConfig(id: String, spanX: Int, spanY: Int) {
         updateSettings {
@@ -180,12 +192,24 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
                 "TELEMETRY"   -> copy(showTelemetry = true)
                 "ALTIMETER"   -> copy(showAltimeter = true)
                 "SPEEDOMETER" -> copy(showSpeedometer = true)
+                "PIP_APP"     -> copy(showPip = true)
+                "VITALS"      -> copy(showVitals = true)
+                "TRIP_TRACKER" -> copy(showTripTracker = true)
+                "SOUNDBOARD"  -> copy(showSoundboard = true)
                 else          -> this
             }
             val idx       = layout.indexOfFirst { it.id == id }
             val newLayout = if (idx >= 0) layout.toMutableList().also {
-                it[idx] = it[idx].copy(enabled = true, gridX = cell_.first, gridY = cell_.second)
-            } else layout + com.openlauncher.app.data.WidgetConfig(id, cell_.first, cell_.second)
+                it[idx] = if (id == "PIP_APP")
+                    it[idx].copy(enabled = true, gridX = cell_.first, gridY = 0, spanX = 1, spanY = 2)
+                else
+                    it[idx].copy(enabled = true, gridX = cell_.first, gridY = cell_.second)
+            } else {
+                if (id == "PIP_APP")
+                    layout + com.openlauncher.app.data.WidgetConfig(id, cell_.first, 0, spanX = 1, spanY = 2)
+                else
+                    layout + com.openlauncher.app.data.WidgetConfig(id, cell_.first, cell_.second)
+            }
             withShow.copy(widgetLayout = newLayout)
         }
     }
@@ -199,8 +223,18 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
                 "TELEMETRY"   -> copy(showTelemetry = false)
                 "ALTIMETER"   -> copy(showAltimeter = false)
                 "SPEEDOMETER" -> copy(showSpeedometer = false)
+                "PIP_APP"     -> copy(showPip = false)
+                "VITALS"      -> copy(showVitals = false)
+                "TRIP_TRACKER" -> copy(showTripTracker = false)
+                "SOUNDBOARD"  -> copy(showSoundboard = false)
                 else          -> this
             }
+        }
+    }
+
+    fun updateSoundboardPad(index: Int, pad: SoundPadConfig) {
+        updateSettings {
+            copy(soundboardPads = soundboardPads.toMutableList().also { it[index] = pad })
         }
     }
 

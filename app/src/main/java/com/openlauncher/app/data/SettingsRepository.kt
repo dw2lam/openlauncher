@@ -45,6 +45,14 @@ class SettingsRepository(private val context: Context) {
         val SIDEBAR_POSITION           = stringPreferencesKey("sidebar_position")
         val BOTTOM_BAR_SHORTCUTS_RIGHT = booleanPreferencesKey("bottom_bar_shortcuts_right")
         val DAY_NIGHT_MODE        = stringPreferencesKey("day_night_mode")
+        val SHOW_PIP              = booleanPreferencesKey("show_pip")
+        val PIP_APP_PACKAGE       = stringPreferencesKey("pip_app_package")
+        val ONBOARDING_COMPLETED  = booleanPreferencesKey("onboarding_completed")
+        val SHOW_VITALS           = booleanPreferencesKey("show_vitals")
+        val SHOW_TRIP_TRACKER     = booleanPreferencesKey("show_trip_tracker")
+        val COMPASS_OFFSET        = floatPreferencesKey("compass_offset")
+        val SHOW_SOUNDBOARD       = booleanPreferencesKey("show_soundboard")
+        val SOUNDBOARD_PADS_JSON  = stringPreferencesKey("soundboard_pads_json")
     }
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data
@@ -96,7 +104,17 @@ class SettingsRepository(private val context: Context) {
                 sidebarPosition  = prefs[Keys.SIDEBAR_POSITION]?.let { runCatching { SidebarPosition.valueOf(it) }.getOrNull() }
                                    ?: if (prefs[Keys.RIGHT_HAND_DRIVE] == true) SidebarPosition.RIGHT else defaults.sidebarPosition,
                 bottomBarShortcutsRight = prefs[Keys.BOTTOM_BAR_SHORTCUTS_RIGHT] ?: defaults.bottomBarShortcutsRight,
-                dayNightMode     = prefs[Keys.DAY_NIGHT_MODE]?.let { runCatching { DayNightMode.valueOf(it) }.getOrNull() } ?: defaults.dayNightMode
+                dayNightMode     = prefs[Keys.DAY_NIGHT_MODE]?.let { runCatching { DayNightMode.valueOf(it) }.getOrNull() } ?: defaults.dayNightMode,
+                showPip          = prefs[Keys.SHOW_PIP]         ?: defaults.showPip,
+                pipAppPackage    = prefs[Keys.PIP_APP_PACKAGE]  ?: defaults.pipAppPackage,
+                onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: defaults.onboardingCompleted,
+                showVitals       = prefs[Keys.SHOW_VITALS]      ?: defaults.showVitals,
+                showTripTracker  = prefs[Keys.SHOW_TRIP_TRACKER] ?: defaults.showTripTracker,
+                compassOffset    = prefs[Keys.COMPASS_OFFSET]    ?: defaults.compassOffset,
+                showSoundboard   = prefs[Keys.SHOW_SOUNDBOARD]   ?: defaults.showSoundboard,
+                soundboardPads   = prefs[Keys.SOUNDBOARD_PADS_JSON]?.let {
+                    gson.fromJson<List<SoundPadConfig>>(it, object : com.google.gson.reflect.TypeToken<List<SoundPadConfig>>() {}.type)
+                } ?: defaults.soundboardPads
             )
         }
 
@@ -128,6 +146,14 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.SIDEBAR_POSITION]           = s.sidebarPosition.name
             prefs[Keys.BOTTOM_BAR_SHORTCUTS_RIGHT] = s.bottomBarShortcutsRight
             prefs[Keys.DAY_NIGHT_MODE]     = s.dayNightMode.name
+            prefs[Keys.SHOW_PIP]           = s.showPip
+            prefs[Keys.PIP_APP_PACKAGE]    = s.pipAppPackage
+            prefs[Keys.ONBOARDING_COMPLETED] = s.onboardingCompleted
+            prefs[Keys.SHOW_VITALS]        = s.showVitals
+            prefs[Keys.SHOW_TRIP_TRACKER]  = s.showTripTracker
+            prefs[Keys.COMPASS_OFFSET]     = s.compassOffset
+            prefs[Keys.SHOW_SOUNDBOARD]    = s.showSoundboard
+            prefs[Keys.SOUNDBOARD_PADS_JSON] = gson.toJson(s.soundboardPads)
         }
     }
 

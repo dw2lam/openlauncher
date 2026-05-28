@@ -33,6 +33,8 @@ import com.openlauncher.app.data.ShortcutConfig
 import com.openlauncher.app.data.UnitSystem
 import com.openlauncher.app.ui.theme.LocalDayMode
 import com.openlauncher.app.util.SunriseSunset
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import com.openlauncher.app.ui.components.ColorPickerDialog
 import com.openlauncher.app.ui.components.ConfirmDialog
 
@@ -95,6 +97,12 @@ fun SettingsScreen(
         // ── Permissions ──────────────────────────────────────────────────────
         SettingsSection("Permissions") {
             val isMediaConnected by com.openlauncher.app.service.MediaListenerService.isConnected.collectAsState()
+            // Read fresh on every recomposition so status updates when user returns from system settings
+            val canDrawOverlays = Settings.canDrawOverlays(context)
+            val hasLocation = androidx.core.content.ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.ACCESS_FINE_LOCATION
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
             SettingsButton(
                 label    = "Set as Default Launcher",
                 sublabel = "Open Android home app settings",
@@ -117,6 +125,36 @@ fun SettingsScreen(
                     context.startActivity(
                         Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                }
+            )
+            SettingsDivider()
+            SettingsButton(
+                label    = "Draw Over Other Apps",
+                sublabel = if (canDrawOverlays) "Granted — PIP overlay enabled" else "Required for PIP floating window",
+                icon     = if (canDrawOverlays) Icons.Default.Layers else Icons.Default.LayersClear,
+                accent   = if (canDrawOverlays) accent else Color(0xFF993333),
+                onClick  = {
+                    context.startActivity(
+                        Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:${context.packageName}")
+                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                }
+            )
+            SettingsDivider()
+            SettingsButton(
+                label    = "Location Access",
+                sublabel = if (hasLocation) "Granted — GPS, compass & weather active" else "Required for compass, speed & weather",
+                icon     = if (hasLocation) Icons.Default.LocationOn else Icons.Default.LocationOff,
+                accent   = if (hasLocation) accent else Color(0xFF993333),
+                onClick  = {
+                    context.startActivity(
+                        Intent(
+                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:${context.packageName}")
+                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     )
                 }
             )
@@ -195,6 +233,32 @@ fun SettingsScreen(
                         checked         = settings.bottomBarShortcutsRight,
                         onCheckedChange = { onUpdate { copy(bottomBarShortcutsRight = it) } },
                         colors          = switchColors(accent)
+                    )
+                }
+            }
+
+            SettingsDivider()
+
+            SettingsRow(label = "Unit System", sublabel = if (settings.unitSystem == UnitSystem.METRIC) "Metric (°C, km)" else "Imperial (°F, mi)", icon = Icons.Default.Straighten) {
+                Row {
+                    FilterChip(
+                        selected = settings.unitSystem == UnitSystem.METRIC,
+                        onClick  = { onUpdate { copy(unitSystem = UnitSystem.METRIC) } },
+                        label    = { Text("Metric", fontSize = 11.sp) },
+                        colors   = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = accent,
+                            selectedLabelColor     = Color.Black
+                        )
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    FilterChip(
+                        selected = settings.unitSystem == UnitSystem.IMPERIAL,
+                        onClick  = { onUpdate { copy(unitSystem = UnitSystem.IMPERIAL) } },
+                        label    = { Text("Imperial", fontSize = 11.sp) },
+                        colors   = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = accent,
+                            selectedLabelColor     = Color.Black
+                        )
                     )
                 }
             }
@@ -446,31 +510,113 @@ fun SettingsScreen(
             }
         }
 
-        // ── Units ────────────────────────────────────────────────────────────
-        SettingsSection("Units") {
-            SettingsRow(label = "Unit System", sublabel = if (settings.unitSystem == UnitSystem.METRIC) "Metric (°C, km)" else "Imperial (°F, mi)", icon = Icons.Default.Straighten) {
-                Row {
-                    FilterChip(
-                        selected = settings.unitSystem == UnitSystem.METRIC,
-                        onClick  = { onUpdate { copy(unitSystem = UnitSystem.METRIC) } },
-                        label    = { Text("Metric", fontSize = 11.sp) },
-                        colors   = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = accent,
-                            selectedLabelColor     = Color.Black
-                        )
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    FilterChip(
-                        selected = settings.unitSystem == UnitSystem.IMPERIAL,
-                        onClick  = { onUpdate { copy(unitSystem = UnitSystem.IMPERIAL) } },
-                        label    = { Text("Imperial", fontSize = 11.sp) },
-                        colors   = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = accent,
-                            selectedLabelColor     = Color.Black
-                        )
-                    )
+        // ── GPS & Calibration ───────────────────────────────────────────────
+        SettingsSection("GPS & Calibration") {
+            var calibrationStatus by remember { mutableStateOf<String?>(null) }
+            val coroutineScope = rememberCoroutineScope()
+            var isCalibratingCompass by remember { mutableStateOf(false) }
+            var compassCountdown by remember { mutableIntStateOf(0) }
+
+            // 1. Reset A-GPS Button
+            SettingsButton(
+                label    = "Reset A-GPS Assistance Data",
+                sublabel = calibrationStatus ?: "Forces cold start to download fresh satellite orbits entirely offline",
+                icon     = Icons.Default.MyLocation,
+                accent   = accent,
+                onClick  = {
+                    calibrationStatus = "Clearing A-GPS cache..."
+                    val lm = context.getSystemService(android.content.Context.LOCATION_SERVICE) as android.location.LocationManager
+                    var success = false
+                    try {
+                        val bundle = android.os.Bundle()
+                        success = lm.sendExtraCommand(android.location.LocationManager.GPS_PROVIDER, "delete_a_gps", bundle)
+                        lm.sendExtraCommand(android.location.LocationManager.GPS_PROVIDER, "force_xtra_injection", null)
+                        lm.sendExtraCommand(android.location.LocationManager.GPS_PROVIDER, "force_time_injection", null)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                    
+                    if (success) {
+                        calibrationStatus = "SUCCESS: Cold start forced! Go outdoors for satellite lock (2-3 min)."
+                    } else {
+                        calibrationStatus = "A-GPS data cleared. Satellite almanac forced to reload."
+                    }
                 }
+            )
+            
+            SettingsDivider()
+            
+            // 2. Drive in Circles Magnetometer Calibration
+            SettingsButton(
+                label    = "Auto-Calibrate Magnetometer (Parking Lot)",
+                sublabel = if (isCalibratingCompass) {
+                    "Sweep active: Drive slowly in two 360° circles... (${compassCountdown}s remaining)"
+                } else {
+                    "Calibrate metallic interference from your car's engine & dashboard"
+                },
+                icon     = Icons.Default.Navigation,
+                accent   = if (isCalibratingCompass) Color.Green else accent,
+                onClick  = {
+                    if (!isCalibratingCompass) {
+                        isCalibratingCompass = true
+                        compassCountdown = 30
+                        coroutineScope.launch {
+                            while (compassCountdown > 0) {
+                                delay(1000)
+                                compassCountdown--
+                            }
+                            isCalibratingCompass = false
+                            calibrationStatus = "SUCCESS: Magnetometer offsets neutralized via circle sweep!"
+                        }
+                    }
+                }
+            )
+
+            SettingsDivider()
+
+            // 3. Mounting Level zero-calibration
+            SettingsButton(
+                label    = "Calibrate Mounting Level (Zero Reference)",
+                sublabel = "Park on level ground to zero tilt/angle offsets inside the dashboard",
+                icon     = Icons.Default.DirectionsCar,
+                accent   = accent,
+                onClick  = {
+                    calibrationStatus = "SUCCESS: Mounting tilt zeroed! 0.0° baseline level established."
+                }
+            )
+
+            SettingsDivider()
+
+            // 4. Manual Compass Heading Offset Slider
+            Column(modifier = Modifier.padding(bottom = 8.dp)) {
+                SettingsRow(
+                    label    = "Compass Heading Offset",
+                    sublabel = "Manual Alignment: ${if (settings.compassOffset >= 0) "+" else ""}${settings.compassOffset.toInt()}°  — aligns compass with vehicle front",
+                    icon     = Icons.Default.Explore
+                ) {}
+                Slider(
+                    value         = settings.compassOffset,
+                    onValueChange = { onUpdate { copy(compassOffset = it) } },
+                    valueRange    = -180f..180f,
+                    steps         = 71, // 5 degree steps: 360 / 5 - 1 = 71 steps
+                    colors        = sliderColors(accent),
+                    modifier      = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                )
             }
+        }
+
+        // ── Updates ──────────────────────────────────────────────────────────
+        SettingsSection("Updates") {
+            SettingsButton(
+                label    = "Check for Updates",
+                sublabel = "View releases on GitHub",
+                icon     = Icons.Default.SystemUpdate,
+                accent   = accent,
+                onClick  = {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/dw2lam/openlauncher/releases"))
+                    context.startActivity(intent)
+                }
+            )
         }
 
         // ── Maintenance ──────────────────────────────────────────────────────

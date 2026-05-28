@@ -62,6 +62,10 @@ private val ALL_WIDGET_TYPES = listOf(
     WidgetTypeInfo("TELEMETRY",   "COMPASS",     Icons.Default.Explore,     "Speed & heading"),
     WidgetTypeInfo("ALTIMETER",   "ALTIMETER",   Icons.Default.FlightTakeoff, "Roll, pitch & altitude"),
     WidgetTypeInfo("SPEEDOMETER", "SPEED",       Icons.Default.Speed,         "GPS speed"),
+    WidgetTypeInfo("PIP_APP",     "PIP",         Icons.Default.WebAsset,      "Embedded app or map"),
+    WidgetTypeInfo("VITALS",      "VITALS",      Icons.Default.Dns,           "Head Unit Health / Vitals"),
+    WidgetTypeInfo("TRIP_TRACKER", "TRIP TRACKER", Icons.Default.Map,          "Trip logs & stats"),
+    WidgetTypeInfo("SOUNDBOARD",  "SOUNDBOARD",  Icons.Default.Piano,         "Custom sound pads")
 )
 
 private fun canAddWidget(settings: com.openlauncher.app.data.AppSettings): Boolean {
@@ -72,6 +76,10 @@ private fun canAddWidget(settings: com.openlauncher.app.data.AppSettings): Boole
         if (settings.showTelemetry) add("TELEMETRY")
         if (settings.showAltimeter) add("ALTIMETER")
         if (settings.showSpeedometer) add("SPEEDOMETER")
+        if (settings.showPip) add("PIP_APP")
+        if (settings.showVitals) add("VITALS")
+        if (settings.showTripTracker) add("TRIP_TRACKER")
+        if (settings.showSoundboard) add("SOUNDBOARD")
     }
     val activeWidgets = settings.widgetLayout.filter { it.enabled && it.id in visibleIds }
     val occupied = buildSet<Pair<Int, Int>> {
@@ -106,12 +114,16 @@ fun HomeScreen(
     onAssignAndroidAuto: () -> Unit,
     onClearCarPlay: () -> Unit,
     onClearAndroidAuto: () -> Unit,
+    onAssignPip: () -> Unit,
+    onClearPip: () -> Unit,
+    onLaunchPip: () -> Unit,
     onTapNowPlaying: () -> Unit,
     onUpdateWidget: (id: String, spanX: Int, spanY: Int) -> Unit,
     onMoveWidget: (id: String, gridX: Int, gridY: Int) -> Unit,
     onAddWidget: (id: String) -> Unit,
     onRemoveWidget: (id: String) -> Unit,
     onSetClockStyle: (ClockStyle) -> Unit,
+    onUpdateSoundPad: (index: Int, pad: com.openlauncher.app.data.SoundPadConfig) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val accent       = Color(settings.accentColor)
@@ -214,25 +226,15 @@ fun HomeScreen(
                 if (settings.showTelemetry) add("TELEMETRY")
                 if (settings.showAltimeter) add("ALTIMETER")
                 if (settings.showSpeedometer) add("SPEEDOMETER")
+                if (settings.showPip) add("PIP_APP")
+                if (settings.showVitals) add("VITALS")
+                if (settings.showTripTracker) add("TRIP_TRACKER")
+                if (settings.showSoundboard) add("SOUNDBOARD")
             }
 
-            // Keep only visible widgets, then auto-expand each widget's spanX to fill
-            // any empty columns immediately to its right in the same row band.
+            // Keep only visible widgets exactly as configured in settings, allowing explicit resizing to dictate layout
             val visible = settings.widgetLayout.filter { it.enabled && it.id in visibleIds }
-            val rendered = visible.map { w ->
-                var spanX = w.spanX
-                outer@ for (col in (w.gridX + w.spanX) until GRID_COLS) {
-                    for (other in visible) {
-                        if (other.id == w.id) continue
-                        val colOverlap = col >= other.gridX && col < other.gridX + other.spanX
-                        val rowOverlap = w.gridY < other.gridY + other.spanY &&
-                                         w.gridY + w.spanY > other.gridY
-                        if (colOverlap && rowOverlap) break@outer
-                    }
-                    spanX++
-                }
-                w.copy(spanX = spanX)
-            }
+            val rendered = visible
 
             // ── Drag state ───────────────────────────────────────────────────
             var draggingId   by remember { mutableStateOf<String?>(null) }
@@ -301,6 +303,9 @@ fun HomeScreen(
                     "TELEMETRY"   -> "COMPASS"
                     "ALTIMETER"   -> "ALTIMETER"
                     "SPEEDOMETER" -> "SPEED"
+                    "PIP_APP"     -> "PIP"
+                    "TRIP_TRACKER" -> "TRIP"
+                    "SOUNDBOARD"  -> "SOUND"
                     else          -> w.id
                 }
 
@@ -395,12 +400,14 @@ fun HomeScreen(
                         )
                         "TELEMETRY" -> TelemetryWidget(
                             location  = location,
-                            bearing   = bearing,
+                            bearing   = (bearing + settings.compassOffset + 360f) % 360f,
                             accent    = accent,
                             isDayMode = isDayMode,
                             modifier  = Modifier.fillMaxSize()
                         )
                         "ALTIMETER" -> AltimeterWidget(
+                            location  = location,
+                            isMetric  = settings.unitSystem == com.openlauncher.app.data.UnitSystem.METRIC,
                             accent    = accent,
                             isDayMode = isDayMode,
                             modifier  = Modifier.fillMaxSize()
@@ -412,11 +419,41 @@ fun HomeScreen(
                             isDayMode = isDayMode,
                             modifier  = Modifier.fillMaxSize()
                         )
+                        "PIP_APP" -> com.openlauncher.app.ui.widget.PipWidget(
+                            packageName = settings.pipAppPackage,
+                            accent      = accent,
+                            isDayMode   = isDayMode,
+                            isEditing   = editMode,
+                            onLaunch    = onLaunchPip,
+                            onAssign    = onAssignPip,
+                            modifier    = Modifier.fillMaxSize()
+                        )
+                        "VITALS" -> VitalsWidget(
+                            accent    = accent,
+                            isDayMode = isDayMode,
+                            modifier  = Modifier.fillMaxSize()
+                        )
+                        "TRIP_TRACKER" -> TripTrackerWidget(
+                            location  = location,
+                            isMetric  = settings.unitSystem == com.openlauncher.app.data.UnitSystem.METRIC,
+                            accent    = accent,
+                            isDayMode = isDayMode,
+                            modifier  = Modifier.fillMaxSize()
+                        )
+                        "SOUNDBOARD" -> SoundboardWidget(
+                            pads      = settings.soundboardPads,
+                            accent    = accent,
+                            isDayMode = isDayMode,
+                            isEditing = editMode,
+                            onUpdatePad = onUpdateSoundPad,
+                            modifier  = Modifier.fillMaxSize()
+                        )
                     }
 
-                    // Label — hide when album art fills the widget background
+                    // Label — hide when album art fills the widget background or PIP is showing WebView
                     val labelColor = when {
                         w.id == "NOW_PLAYING" && nowPlaying?.albumArt != null && nowPlaying.title.isNotEmpty() -> Color.Transparent
+                        w.id == "PIP_APP" && settings.pipAppPackage.isNotEmpty() -> Color.Transparent
                         isDayMode -> Color(0xFF999999)
                         else      -> Color(0xFF3A3A3A)
                     }
@@ -443,11 +480,14 @@ fun HomeScreen(
             clockStyle          = settings.clockStyle,
             carPlayPackage      = settings.carPlayPackage,
             androidAutoPackage  = settings.androidAutoPackage,
+            pipAppPackage       = settings.pipAppPackage,
             onResize            = { contextMenuId = null; resizingId = id },
             onAssignCarPlay     = { contextMenuId = null; onAssignCarPlay() },
             onAssignAndroidAuto = { contextMenuId = null; onAssignAndroidAuto() },
             onClearCarPlay      = { contextMenuId = null; onClearCarPlay() },
             onClearAndroidAuto  = { contextMenuId = null; onClearAndroidAuto() },
+            onAssignPip         = { contextMenuId = null; onAssignPip() },
+            onClearPip          = { contextMenuId = null; onClearPip() },
             onSetClockStyle     = { onSetClockStyle(it) },
             onDismiss           = { contextMenuId = null }
         )
@@ -488,11 +528,14 @@ private fun WidgetContextMenu(
     clockStyle: ClockStyle,
     carPlayPackage: String = "",
     androidAutoPackage: String = "",
+    pipAppPackage: String = "",
     onResize: () -> Unit,
     onAssignCarPlay: () -> Unit,
     onAssignAndroidAuto: () -> Unit,
     onClearCarPlay: () -> Unit,
     onClearAndroidAuto: () -> Unit,
+    onAssignPip: () -> Unit,
+    onClearPip: () -> Unit,
     onSetClockStyle: (ClockStyle) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -510,7 +553,7 @@ private fun WidgetContextMenu(
                 .width(200.dp)
         ) {
             val inactiveMenuTint = if (isDayMode) Color(0xFF777777) else Color(0xFF555555)
-            ContextRow("RESIZE", Icons.Default.OpenWith, accent, onResize)
+            if (widgetId != "PIP_APP") ContextRow("RESIZE", Icons.Default.OpenWith, accent, onResize)
             if (widgetId == "CLOCK") {
                 HorizontalDivider(color = menuDivider)
                 ContextRow(
@@ -539,6 +582,14 @@ private fun WidgetContextMenu(
                 if (androidAutoPackage.isNotEmpty()) {
                     HorizontalDivider(color = menuDivider)
                     ContextRow("CLEAR ANDROID AUTO APP", Icons.Default.DirectionsCar, Color(0xFF884444), onClearAndroidAuto)
+                }
+            }
+            if (widgetId == "PIP_APP") {
+                HorizontalDivider(color = menuDivider)
+                ContextRow("ASSIGN APP", Icons.Default.WebAsset, accent, onAssignPip)
+                if (pipAppPackage.isNotEmpty()) {
+                    HorizontalDivider(color = menuDivider)
+                    ContextRow("CLEAR APP", Icons.Default.WebAsset, Color(0xFF884444), onClearPip)
                 }
             }
         }
@@ -700,6 +751,10 @@ private fun WidgetLibraryDialog(
         if (settings.showTelemetry) add("TELEMETRY")
         if (settings.showAltimeter) add("ALTIMETER")
         if (settings.showSpeedometer) add("SPEEDOMETER")
+        if (settings.showPip) add("PIP_APP")
+        if (settings.showVitals) add("VITALS")
+        if (settings.showTripTracker) add("TRIP_TRACKER")
+        if (settings.showSoundboard) add("SOUNDBOARD")
     }
     val canAdd = canAddWidget(settings)
 
@@ -729,9 +784,9 @@ private fun WidgetLibraryDialog(
             }
 
             LazyVerticalGrid(
-                columns               = GridCells.Fixed(3),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement   = Arrangement.spacedBy(8.dp),
+                columns               = GridCells.Fixed(4),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement   = Arrangement.spacedBy(6.dp),
                 modifier              = Modifier.fillMaxWidth()
             ) {
                 items(ALL_WIDGET_TYPES) { info ->
@@ -778,22 +833,28 @@ private fun WidgetLibraryCard(
 
     Column(
         modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1f)
             .clip(RoundedCornerShape(4.dp))
             .background(cardBg)
             .border(1.dp, cardBorder, RoundedCornerShape(4.dp))
             .clickable(enabled = enabled, onClick = onToggle)
-            .padding(vertical = 14.dp, horizontal = 10.dp),
+            .padding(6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(7.dp)
+        verticalArrangement = Arrangement.Center
     ) {
-        Icon(info.icon, null, tint = iconTint, modifier = Modifier.size(20.dp))
+        Icon(info.icon, null, tint = iconTint, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.height(5.dp))
         Text(
             text          = info.label,
             color         = labelColor,
-            fontSize      = 8.sp,
-            letterSpacing = 1.5.sp,
-            textAlign     = TextAlign.Center
+            fontSize      = 7.sp,
+            letterSpacing = 1.sp,
+            textAlign     = TextAlign.Center,
+            maxLines      = 2,
+            lineHeight    = 9.sp
         )
+        Spacer(Modifier.height(3.dp))
         Text(
             text          = when {
                 isActive -> "ACTIVE"
@@ -805,7 +866,7 @@ private fun WidgetLibraryCard(
                 !canAdd  -> if (isDayMode) Color(0xFFBBBBBB) else Color(0xFF282828)
                 else     -> if (isDayMode) Color(0xFF999999) else Color(0xFF3A3A3A)
             },
-            fontSize      = 7.sp,
+            fontSize      = 6.sp,
             letterSpacing = 1.sp,
             textAlign     = TextAlign.Center
         )

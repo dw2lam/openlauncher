@@ -38,6 +38,7 @@ class LocationCompassManager(context: Context) {
     // Circular low-pass filter for smooth bearing (avoids 0°/360° wrap artifacts)
     private var bearingSin   = 0f
     private var bearingCos   = 1f   // initial: pointing north
+    private var lastLocationForBearing: Location? = null
 
     private val sensorListener = object : SensorEventListener {
         override fun onSensorChanged(event: SensorEvent) {
@@ -74,6 +75,26 @@ class LocationCompassManager(context: Context) {
                 accuracy  = loc.accuracy,
                 speedMps  = if (loc.hasSpeed()) loc.speed else 0f
             )
+
+            // 1. If GPS has a hardware-computed bearing, use it (works offline)
+            if (loc.hasBearing() && loc.bearing != 0f) {
+                _bearing.value = loc.bearing
+            } else {
+                // 2. Math fallback: Calculate bearing between consecutive location points (works offline & sensor-less!)
+                val lastLoc = lastLocationForBearing
+                if (lastLoc != null) {
+                    val distance = lastLoc.distanceTo(loc)
+                    // Ensure the distance is enough to overcome GPS jitter (e.g. 3 meters)
+                    if (distance > 3f) {
+                        val computedBearing = lastLoc.bearingTo(loc)
+                        // Normalize bearing to 0-360
+                        _bearing.value = (computedBearing + 360f) % 360f
+                        lastLocationForBearing = loc
+                    }
+                } else {
+                    lastLocationForBearing = loc
+                }
+            }
         }
         @Deprecated("Deprecated in Java")
         override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
@@ -87,9 +108,11 @@ class LocationCompassManager(context: Context) {
         sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)?.let {
             sensorManager.registerListener(sensorListener, it, SensorManager.SENSOR_DELAY_UI)
         }
-        // Location — try GPS first, fallback to network
+
+        // Location — Robust offline-first registration
+        // GPS Provider (Works 100% offline, sat-based)
         try {
-            if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            if (locationManager.allProviders.contains(LocationManager.GPS_PROVIDER)) {
                 locationManager.requestLocationUpdates(
                     LocationManager.GPS_PROVIDER, 3000L, 5f, locationListener
                 )
@@ -97,16 +120,24 @@ class LocationCompassManager(context: Context) {
                     locationListener.onLocationChanged(it)
                 }
             }
-            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+        } catch (_: Exception) {}
+
+        // Network Provider (Works online, cell/wifi-based)
+        try {
+            if (locationManager.allProviders.contains(LocationManager.NETWORK_PROVIDER)) {
                 locationManager.requestLocationUpdates(
                     LocationManager.NETWORK_PROVIDER, 5000L, 10f, locationListener
                 )
+                locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)?.let {
+                    locationListener.onLocationChanged(it)
+                }
             }
-        } catch (_: SecurityException) {}
+        } catch (_: Exception) {}
     }
 
     fun stop() {
         sensorManager.unregisterListener(sensorListener)
         locationManager.removeUpdates(locationListener)
+        lastLocationForBearing = null
     }
 }

@@ -25,6 +25,21 @@ enum class DefaultShortcutIcon {
     GLOBE
 }
 
+data class SoundPadConfig(
+    val label: String,
+    val audioUri: String = "",
+    val synthType: String = "BEEP"
+)
+
+fun defaultSoundboardPads() = listOf(
+    SoundPadConfig("HORN",  synthType = "HORN"),
+    SoundPadConfig("BEEP",  synthType = "BEEP"),
+    SoundPadConfig("ALERT", synthType = "ALERT"),
+    SoundPadConfig("KICK",  synthType = "KICK"),
+    SoundPadConfig("SNARE", synthType = "SNARE"),
+    SoundPadConfig("BASS",  synthType = "BASS")
+)
+
 data class ShortcutConfig(
     val packageName: String = "",
     val label: String = "",
@@ -72,7 +87,15 @@ data class AppSettings(
     val bottomBarShortcutsRight: Boolean = false,
     val showAltimeter: Boolean = false,
     val showSpeedometer: Boolean = false,
-    val dayNightMode: DayNightMode = DayNightMode.DARK
+    val dayNightMode: DayNightMode = DayNightMode.DARK,
+    val showPip: Boolean = false,
+    val pipAppPackage: String = "",
+    val onboardingCompleted: Boolean = false,
+    val showVitals: Boolean = false,
+    val showTripTracker: Boolean = false,
+    val compassOffset: Float = 0f,
+    val showSoundboard: Boolean = false,
+    val soundboardPads: List<SoundPadConfig> = defaultSoundboardPads()
 )
 
 fun defaultShortcuts() = listOf(
@@ -96,6 +119,10 @@ fun AppSettings.activeWidgetIds(): Set<String> = buildSet {
     if (showTelemetry) add("TELEMETRY")
     if (showAltimeter) add("ALTIMETER")
     if (showSpeedometer) add("SPEEDOMETER")
+    if (showPip) add("PIP_APP")
+    if (showVitals) add("VITALS")
+    if (showTripTracker) add("TRIP_TRACKER")
+    if (showSoundboard) add("SOUNDBOARD")
 }
 
 /**
