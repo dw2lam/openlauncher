@@ -56,6 +56,14 @@ fun NowPlayingWidget(
     val hasAutoApp  = androidAutoPackage.isNotEmpty()
     val hasContent  = state != null && state.title.isNotEmpty()
 
+    // Album art provides its own dark backdrop; without it, adapt to day/night
+    val onDark       = state?.albumArt != null && hasContent
+    val primaryText  = if (onDark || !isDayMode) Color.White else Color(0xFF1A1A1A)
+    val secondaryText = primaryText.copy(alpha = 0.6f)
+    val subtleText    = primaryText.copy(alpha = 0.45f)
+    val iconColor     = primaryText.copy(alpha = 0.75f)
+    val progressTrack = primaryText.copy(alpha = 0.15f)
+
     Box(modifier = modifier) {
         // Album art background
         if (state?.albumArt != null && hasContent) {
@@ -178,7 +186,7 @@ fun NowPlayingWidget(
                     Text(
                         text     = state.title,
                         style    = MaterialTheme.typography.titleMedium,
-                        color    = Color.White,
+                        color    = primaryText,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         fontSize = 14.sp
@@ -186,7 +194,7 @@ fun NowPlayingWidget(
                     Text(
                         text     = state.artist.ifEmpty { "Unknown" },
                         style    = MaterialTheme.typography.bodySmall,
-                        color    = Color.White.copy(alpha = 0.6f),
+                        color    = secondaryText,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         fontSize = 11.sp
@@ -200,14 +208,14 @@ fun NowPlayingWidget(
                             progress     = { (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) },
                             modifier     = Modifier.fillMaxWidth().height(2.dp),
                             color        = accent,
-                            trackColor   = Color.White.copy(alpha = 0.15f)
+                            trackColor   = progressTrack
                         )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(formatMs(positionMs), style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.45f), fontSize = 9.sp)
-                            Text(formatMs(durationMs), style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.45f), fontSize = 9.sp)
+                            Text(formatMs(positionMs), style = MaterialTheme.typography.labelSmall, color = subtleText, fontSize = 9.sp)
+                            Text(formatMs(durationMs), style = MaterialTheme.typography.labelSmall, color = subtleText, fontSize = 9.sp)
                         }
                     }
 
@@ -217,7 +225,7 @@ fun NowPlayingWidget(
                         modifier              = Modifier.fillMaxWidth()
                     ) {
                         IconButton(onClick = { if (!isEditing) onPrev() }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.SkipPrevious, "Prev", tint = Color.White.copy(alpha = 0.75f), modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.SkipPrevious, "Prev", tint = iconColor, modifier = Modifier.size(20.dp))
                         }
                         Box(
                             contentAlignment = Alignment.Center,
@@ -236,7 +244,7 @@ fun NowPlayingWidget(
                             }
                         }
                         IconButton(onClick = { if (!isEditing) onNext() }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.SkipNext, "Next", tint = Color.White.copy(alpha = 0.75f), modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.SkipNext, "Next", tint = iconColor, modifier = Modifier.size(20.dp))
                         }
                     }
                 }
