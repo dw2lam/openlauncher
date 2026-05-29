@@ -18,6 +18,8 @@ import java.util.*
 import kotlin.math.cos
 import kotlin.math.sin
 
+import androidx.compose.material3.MaterialTheme
+
 @Composable
 fun ClockWidget(
     style: ClockStyle,
@@ -34,8 +36,8 @@ fun ClockWidget(
         }
     }
 
-    val contentColor = if (isDayMode) Color(0xFF111111) else Color.White
-    val subColor     = if (isDayMode) Color(0xFF888888) else Color(0xFF777777)
+    val contentColor = if (isDayMode) Color(0xFF111111) else MaterialTheme.colorScheme.onBackground
+    val subColor     = if (isDayMode) Color(0xFF888888) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
 
     Box(modifier = modifier) {
         when (style) {
@@ -76,15 +78,15 @@ private fun AnalogClock(cal: Calendar, accent: Color, isDayMode: Boolean = false
     val minute = cal.get(Calendar.MINUTE).toFloat()
     val second = cal.get(Calendar.SECOND).toFloat()
 
+    val ringColor = if (isDayMode) Color(0xFFCCCCCC) else Color(0xFF2A2A2A)
+    val minuteHandColor = if (isDayMode) Color(0xFF222222) else MaterialTheme.colorScheme.onBackground
+    val pivotBg = if (isDayMode) Color(0xFFEEEEEE) else Color(0xFF1E1E1E)
+
     Box(modifier = Modifier.fillMaxSize()) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val cx     = size.width / 2f
             val cy     = size.height / 2f
             val radius = size.minDimension / 2f * 0.82f
-
-            val ringColor = if (isDayMode) Color(0xFFCCCCCC) else Color(0xFF2A2A2A)
-            val minuteHandColor = if (isDayMode) Color(0xFF222222) else Color.White
-            val pivotBg = if (isDayMode) Color(0xFFEEEEEE) else Color(0xFF1E1E1E)
 
             // Outer hairline ring
             drawCircle(
@@ -160,7 +162,7 @@ private fun AnalogClock(cal: Calendar, accent: Color, isDayMode: Boolean = false
         // Date inset — centered, above 6 o'clock position like a real watch
         Text(
             text      = shortDateString(cal),
-            color     = if (isDayMode) Color(0xFF999999) else Color(0xFF555555),
+            color     = if (isDayMode) Color(0xFF999999) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
             fontSize  = 9.sp,
             letterSpacing = 1.5.sp,
             modifier  = Modifier

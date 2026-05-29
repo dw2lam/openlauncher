@@ -13,29 +13,13 @@ android {
         applicationId  = "com.openlauncher.app"
         minSdk         = 21
         targetSdk      = 36
-        versionCode    = 3
-        versionName    = "0.0.3"
-        manifestPlaceholders["sharedUserId"] = ""
-    }
-
-    signingConfigs {
-        create("aospPlatform") {
-            storeFile = file("../keystore/platform.jks")
-            storePassword = "android"
-            keyAlias = "platform"
-            keyPassword = "android"
-        }
+        versionCode    = 4
+        versionName    = "0.0.4"
     }
 
     buildTypes {
         debug {
             // Default signing config for normal device testing (restores app visibility)
-            manifestPlaceholders["sharedUserId"] = ""
-        }
-        create("aospDebug") {
-            initWith(getByName("debug"))
-            signingConfig = signingConfigs.getByName("aospPlatform")
-            manifestPlaceholders["sharedUserId"] = "android.uid.system"
         }
         release {
             isMinifyEnabled = false
@@ -43,8 +27,6 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("aospPlatform")
-            manifestPlaceholders["sharedUserId"] = "android.uid.system"
         }
     }
 

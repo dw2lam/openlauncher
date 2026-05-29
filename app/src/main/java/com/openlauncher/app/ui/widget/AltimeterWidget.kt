@@ -23,6 +23,8 @@ import androidx.compose.ui.unit.sp
 import com.openlauncher.app.util.LocationData
 import kotlin.math.*
 
+import androidx.compose.material3.MaterialTheme
+
 @Composable
 fun AltimeterWidget(
     location: LocationData?,
@@ -31,8 +33,8 @@ fun AltimeterWidget(
     isDayMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val iconTint = if (isDayMode) Color(0xFF333333) else Color.White.copy(alpha = 0.85f)
-    val labelColor = if (isDayMode) Color(0xFF888888) else Color.White.copy(alpha = 0.30f)
+    val iconTint = if (isDayMode) Color(0xFF333333) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f)
+    val labelColor = if (isDayMode) Color(0xFF888888) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.30f)
     val context = LocalContext.current
 
     // Accelerometer sensor state
@@ -124,7 +126,7 @@ fun AltimeterWidget(
                     val unit = if (isMetric) "m" else "ft"
                     "%,.0f %s".format(altVal, unit)
                 } else "—",
-                color = if (isDayMode) Color(0xFF111111) else Color.White,
+                color = if (isDayMode) Color(0xFF111111) else MaterialTheme.colorScheme.onBackground,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold
             )

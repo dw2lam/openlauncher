@@ -2,6 +2,7 @@ package com.openlauncher.app.ui.widget
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,8 +20,8 @@ fun WeatherWidget(
     isDayMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val contentColor = if (isDayMode) Color(0xFF111111) else Color.White
-    val subColor     = if (isDayMode) Color(0xFF888888) else Color(0xFF777777)
+    val contentColor = if (isDayMode) Color(0xFF111111) else MaterialTheme.colorScheme.onBackground
+    val subColor     = if (isDayMode) Color(0xFF888888) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
 
     Box(modifier = modifier) {
         if (state != null) {

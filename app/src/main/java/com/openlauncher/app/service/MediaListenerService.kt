@@ -90,8 +90,10 @@ class MediaListenerService : NotificationListenerService() {
                          ?: meta?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
                          ?: meta?.getString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE)
                          ?: "",
-            albumArt   = meta?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
-                         ?: meta?.getBitmap(MediaMetadata.METADATA_KEY_ART),
+            albumArt   = try {
+                meta?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+                    ?: meta?.getBitmap(MediaMetadata.METADATA_KEY_ART)
+            } catch (_: Exception) { null },
             isPlaying  = controller.playbackState?.state == PlaybackState.STATE_PLAYING,
             controller = controller
         )

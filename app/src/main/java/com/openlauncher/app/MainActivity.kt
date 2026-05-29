@@ -22,6 +22,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.openlauncher.app.data.DayNightMode
 import com.openlauncher.app.data.SidebarPosition
+import com.openlauncher.app.data.GradientDirection
 import com.openlauncher.app.model.NavDestination
 import com.openlauncher.app.ui.components.Sidebar
 import com.openlauncher.app.ui.screen.*
@@ -71,17 +72,29 @@ class MainActivity : ComponentActivity() {
             val isWifi      by vm.isWifi.collectAsStateWithLifecycle()
             val isData      by vm.isData.collectAsStateWithLifecycle()
             val isDayModeVM by vm.isDayMode.collectAsStateWithLifecycle()
+            val hardwareRadio by vm.hardwareRadio.collectAsStateWithLifecycle()
             val systemIsDark = isSystemInDarkTheme()
             val isDayMode = if (settings.dayNightMode == DayNightMode.SYSTEM) !systemIsDark else isDayModeVM
             val pickerSlot      by vm.shortcutPickerSlot.collectAsStateWithLifecycle()
             val appPickerTarget by vm.appPickerTarget.collectAsStateWithLifecycle()
 
             val accent         = Color(settings.accentColor)
-            val bg             = if (isDayMode) Color(0xFFEEEEEE) else Color(settings.backgroundColor)
+            val bg             = if (settings.useCustomBackgroundColor) {
+                Color(settings.backgroundColor)
+            } else {
+                if (isDayMode) Color(0xFFEEEEEE) else Color.Black
+            }
+            val textColor      = if (isDayMode) Color(0xFF111111) else Color(settings.fontColor)
             val bgGradientEnd  = Color(settings.gradientEndColor)
-            val bgBrush        = if (!isDayMode && settings.useGradient)
-                androidx.compose.ui.graphics.Brush.linearGradient(listOf(bg, bgGradientEnd))
-            else null
+            val bgBrush        = if (settings.useCustomBackgroundColor && settings.useGradient) {
+                val colors = listOf(bg, bgGradientEnd)
+                when (settings.gradientDirection) {
+                    GradientDirection.TOP_TO_BOTTOM -> androidx.compose.ui.graphics.Brush.verticalGradient(colors)
+                    GradientDirection.LEFT_TO_RIGHT -> androidx.compose.ui.graphics.Brush.horizontalGradient(colors)
+                    GradientDirection.DIAGONAL -> androidx.compose.ui.graphics.Brush.linearGradient(colors)
+                    GradientDirection.RADIAL -> androidx.compose.ui.graphics.Brush.radialGradient(colors)
+                }
+            } else null
 
             val baseDensity = LocalDensity.current
             CompositionLocalProvider(
@@ -90,16 +103,18 @@ class MainActivity : ComponentActivity() {
                     fontScale = baseDensity.fontScale
                 )
             ) {
-            if (!settingsLoaded) {
-                Box(modifier = Modifier.fillMaxSize().background(Color.Black))
-            } else OpenLauncherTheme(
-                accent     = accent,
-                background = bg,
-                fontBold   = settings.fontBold,
-                textScale  = settings.textScale,
-                appFont    = settings.appFont,
-                isDayMode  = isDayMode
-            ) {
+                if (!settingsLoaded) {
+                    Box(modifier = Modifier.fillMaxSize().background(Color.Black))
+                } else OpenLauncherTheme(
+                    accent     = accent,
+                    background = bg,
+                    textColor  = textColor,
+                    fontBold   = settings.fontBold,
+                    textScale  = settings.textScale,
+                    appFont    = settings.appFont,
+                    isDayMode  = isDayMode,
+                    useCustomBg = settings.useCustomBackgroundColor
+                ) {
                 if (!settings.onboardingCompleted) {
                     OnboardingScreen(
                         accent = accent,
@@ -203,7 +218,17 @@ class MainActivity : ComponentActivity() {
                                         onAddWidget         = { id -> vm.addWidget(id) },
                                         onRemoveWidget      = { id -> vm.removeWidget(id) },
                                         onSetClockStyle     = { style -> vm.updateSettings { copy(clockStyle = style) } },
-                                        onUpdateSoundPad    = { idx, pad -> vm.updateSoundboardPad(idx, pad) }
+                                        onSetVitalsAsBars   = { asBars -> vm.updateSettings { copy(vitalsAsBars = asBars) } },
+                                        onSetSpeedometerDigitalOnly = { digital -> vm.updateSettings { copy(speedometerDigitalOnly = digital) } },
+                                        onUpdateSoundPad    = { idx, pad -> vm.updateSoundboardPad(idx, pad) },
+                                        hardwareRadio         = hardwareRadio,
+                                        onLaunchHardwareRadio = { vm.launchHardwareRadioApp() },
+                                        onStopHardwareRadio   = { vm.stopHardwareRadioApp() },
+                                        onRadioSeekUp         = { vm.radioSeekUp() },
+                                        onRadioSeekDown       = { vm.radioSeekDown() },
+                                        onRadioCycleFm        = { vm.radioCycleFm() },
+                                        onRadioSwitchAm       = { vm.radioSwitchAm() },
+                                        onRadioTune           = { band, freq -> vm.radioTune(band, freq) }
                                     )
 
                                     NavDestination.APP_LIBRARY -> AppLibraryScreen(

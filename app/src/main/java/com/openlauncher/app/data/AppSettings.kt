@@ -8,6 +8,7 @@ enum class UnitSystem { METRIC, IMPERIAL }
 enum class AppFont { SYSTEM, JETBRAINS_MONO, SOURCE_CODE_PRO }
 enum class DayNightMode { DARK, LIGHT, AUTO, SYSTEM }
 enum class SidebarPosition { LEFT, RIGHT, BOTTOM }
+enum class GradientDirection { TOP_TO_BOTTOM, LEFT_TO_RIGHT, DIAGONAL, RADIAL }
 
 enum class DefaultShortcutIcon {
     NONE,
@@ -32,12 +33,12 @@ data class SoundPadConfig(
 )
 
 fun defaultSoundboardPads() = listOf(
-    SoundPadConfig("HORN",  synthType = "HORN"),
-    SoundPadConfig("BEEP",  synthType = "BEEP"),
-    SoundPadConfig("ALERT", synthType = "ALERT"),
-    SoundPadConfig("KICK",  synthType = "KICK"),
-    SoundPadConfig("SNARE", synthType = "SNARE"),
-    SoundPadConfig("BASS",  synthType = "BASS")
+    SoundPadConfig("mario_jump",   synthType = "mario_jump"),
+    SoundPadConfig("mario_coin",   synthType = "mario_coin"),
+    SoundPadConfig("boom",         synthType = "boom"),
+    SoundPadConfig("loud_fart",    synthType = "loud_fart"),
+    SoundPadConfig("+",            synthType = ""),
+    SoundPadConfig("+",            synthType = "")
 )
 
 data class ShortcutConfig(
@@ -65,6 +66,7 @@ data class AppSettings(
     val vehicleName: String = "MY CAR",
     val accentColor: Int = Color.White.toArgb(),
     val backgroundColor: Int = Color.Black.toArgb(),
+    val fontColor: Int = Color.White.toArgb(),
     val wallpaperUri: String = "",
     val fontBold: Boolean = false,
     val textScale: Float = 1.2f,
@@ -95,7 +97,11 @@ data class AppSettings(
     val showTripTracker: Boolean = false,
     val compassOffset: Float = 0f,
     val showSoundboard: Boolean = false,
-    val soundboardPads: List<SoundPadConfig> = defaultSoundboardPads()
+    val soundboardPads: List<SoundPadConfig> = defaultSoundboardPads(),
+    val vitalsAsBars: Boolean = false,
+    val speedometerDigitalOnly: Boolean = false,
+    val gradientDirection: GradientDirection = GradientDirection.DIAGONAL,
+    val useCustomBackgroundColor: Boolean = false
 )
 
 fun defaultShortcuts() = listOf(
@@ -119,7 +125,6 @@ fun AppSettings.activeWidgetIds(): Set<String> = buildSet {
     if (showTelemetry) add("TELEMETRY")
     if (showAltimeter) add("ALTIMETER")
     if (showSpeedometer) add("SPEEDOMETER")
-    if (showPip) add("PIP_APP")
     if (showVitals) add("VITALS")
     if (showTripTracker) add("TRIP_TRACKER")
     if (showSoundboard) add("SOUNDBOARD")

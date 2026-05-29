@@ -49,13 +49,13 @@ fun AppLibraryScreen(
     modifier: Modifier = Modifier
 ) {
     val isDayMode     = LocalDayMode.current
-    val screenBg      = if (isDayMode) Color(0xFFEEEEEE) else Color.Black
-    val headerColor   = if (isDayMode) Color(0xFF111111) else Color.White
-    val placeholderC  = if (isDayMode) Color(0xFF999999) else Color(0xFF444444)
-    val dividerColor  = if (isDayMode) Color(0xFFCCCCCC) else Color(0xFF1A1A1A)
-    val emptyColor    = if (isDayMode) Color(0xFF888888) else Color(0xFF3A3A3A)
-    val fieldTextC    = if (isDayMode) Color(0xFF111111) else Color.White
-    val fieldBorderU  = if (isDayMode) Color(0xFFCCCCCC) else Color(0xFF1E1E1E)
+    val screenBg      = MaterialTheme.colorScheme.background
+    val headerColor   = MaterialTheme.colorScheme.onBackground
+    val placeholderC  = if (isDayMode) Color(0xFF999999) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+    val dividerColor  = if (isDayMode) Color(0xFFCCCCCC) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.1f)
+    val emptyColor    = if (isDayMode) Color(0xFF888888) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+    val fieldTextC    = MaterialTheme.colorScheme.onBackground
+    val fieldBorderU  = if (isDayMode) Color(0xFFCCCCCC) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f)
 
     val anyPickerMode = isPickerMode || isCarPlayPickerMode
     var query     by remember { mutableStateOf("") }
@@ -231,7 +231,7 @@ private fun AppTile(
         Text(
             text          = app.appName.uppercase(),
             style         = MaterialTheme.typography.labelSmall,
-            color         = if (isDayMode) Color(0xFF666666) else Color(0xFF888888),
+            color         = if (isDayMode) Color(0xFF666666) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
             maxLines      = 1,
             overflow      = TextOverflow.Ellipsis,
             textAlign     = TextAlign.Center,

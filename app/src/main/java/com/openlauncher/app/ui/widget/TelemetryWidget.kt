@@ -26,12 +26,12 @@ fun TelemetryWidget(
     isDayMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val contentColor = if (isDayMode) Color(0xFF111111) else Color.White
-    val subColor     = if (isDayMode) Color(0xFF888888) else Color(0xFF444444)
-    val ringColor    = if (isDayMode) Color(0xFFCCCCCC) else Color(0xFF2E2E2E)
-    val cardinalMain = if (isDayMode) Color(0xFF555555) else Color(0xFFAAAAAA)
-    val cardinalSub  = if (isDayMode) Color(0xFF888888) else Color(0xFF666666)
-    val arrowColor   = if (isDayMode) Color(0xFF222222) else Color.White
+    val contentColor = if (isDayMode) Color(0xFF111111) else MaterialTheme.colorScheme.onBackground
+    val subColor     = if (isDayMode) Color(0xFF888888) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+    val ringColor    = if (isDayMode) Color(0xFFCCCCCC) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.15f)
+    val cardinalMain = if (isDayMode) Color(0xFF555555) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+    val cardinalSub  = if (isDayMode) Color(0xFF888888) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+    val arrowColor   = if (isDayMode) Color(0xFF222222) else MaterialTheme.colorScheme.onBackground
     Column(
         modifier = modifier.padding(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.SpaceBetween

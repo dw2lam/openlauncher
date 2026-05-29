@@ -62,7 +62,6 @@ private val ALL_WIDGET_TYPES = listOf(
     WidgetTypeInfo("TELEMETRY",   "COMPASS",     Icons.Default.Explore,     "Speed & heading"),
     WidgetTypeInfo("ALTIMETER",   "ALTIMETER",   Icons.Default.FlightTakeoff, "Roll, pitch & altitude"),
     WidgetTypeInfo("SPEEDOMETER", "SPEED",       Icons.Default.Speed,         "GPS speed"),
-    WidgetTypeInfo("PIP_APP",     "PIP",         Icons.Default.WebAsset,      "Embedded app or map"),
     WidgetTypeInfo("VITALS",      "VITALS",      Icons.Default.Dns,           "Head Unit Health / Vitals"),
     WidgetTypeInfo("TRIP_TRACKER", "TRIP TRACKER", Icons.Default.Map,          "Trip logs & stats"),
     WidgetTypeInfo("SOUNDBOARD",  "SOUNDBOARD",  Icons.Default.Piano,         "Custom sound pads")
@@ -76,7 +75,6 @@ private fun canAddWidget(settings: com.openlauncher.app.data.AppSettings): Boole
         if (settings.showTelemetry) add("TELEMETRY")
         if (settings.showAltimeter) add("ALTIMETER")
         if (settings.showSpeedometer) add("SPEEDOMETER")
-        if (settings.showPip) add("PIP_APP")
         if (settings.showVitals) add("VITALS")
         if (settings.showTripTracker) add("TRIP_TRACKER")
         if (settings.showSoundboard) add("SOUNDBOARD")
@@ -123,7 +121,17 @@ fun HomeScreen(
     onAddWidget: (id: String) -> Unit,
     onRemoveWidget: (id: String) -> Unit,
     onSetClockStyle: (ClockStyle) -> Unit,
+    onSetVitalsAsBars: (Boolean) -> Unit = {},
+    onSetSpeedometerDigitalOnly: (Boolean) -> Unit = {},
     onUpdateSoundPad: (index: Int, pad: com.openlauncher.app.data.SoundPadConfig) -> Unit = { _, _ -> },
+    hardwareRadio: com.openlauncher.app.viewmodel.LauncherViewModel.HardwareRadioState? = null,
+    onLaunchHardwareRadio: () -> Unit = {},
+    onStopHardwareRadio: () -> Unit = {},
+    onRadioSeekUp: () -> Unit = {},
+    onRadioSeekDown: () -> Unit = {},
+    onRadioCycleFm: () -> Unit = {},
+    onRadioSwitchAm: () -> Unit = {},
+    onRadioTune: (band: String, freq: Float) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val accent       = Color(settings.accentColor)
@@ -132,12 +140,12 @@ fun HomeScreen(
     val widgetBg     = when {
         isDayMode    -> Color(0xFFFFFFFF)
         hasWallpaper -> Color(0xCC000000)
-        else         -> Color(0xFF0B0B0B)
+        else         -> Color.Black.copy(alpha = 0.35f)
     }
     val widgetBorder = when {
         isDayMode    -> Color(0xFFCCCCCC)
         hasWallpaper -> Color(0x22FFFFFF)
-        else         -> Color(0xFF1A1A1A)
+        else         -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.08f)
     }
     val headerTextColor   = if (isDayMode) Color(0xFF111111) else accent
     val statusIconColor   = if (isDayMode) Color(0xFF666666) else Color(0xFF666666)
@@ -226,7 +234,6 @@ fun HomeScreen(
                 if (settings.showTelemetry) add("TELEMETRY")
                 if (settings.showAltimeter) add("ALTIMETER")
                 if (settings.showSpeedometer) add("SPEEDOMETER")
-                if (settings.showPip) add("PIP_APP")
                 if (settings.showVitals) add("VITALS")
                 if (settings.showTripTracker) add("TRIP_TRACKER")
                 if (settings.showSoundboard) add("SOUNDBOARD")
@@ -303,7 +310,6 @@ fun HomeScreen(
                     "TELEMETRY"   -> "COMPASS"
                     "ALTIMETER"   -> "ALTIMETER"
                     "SPEEDOMETER" -> "SPEED"
-                    "PIP_APP"     -> "PIP"
                     "TRIP_TRACKER" -> "TRIP"
                     "SOUNDBOARD"  -> "SOUND"
                     else          -> w.id
@@ -396,7 +402,15 @@ fun HomeScreen(
                             onTapToOpenApp      = onTapNowPlaying,
                             modifier            = Modifier.fillMaxSize(),
                             isEditing           = editMode,
-                            isDayMode           = isDayMode
+                            isDayMode           = isDayMode,
+                            hardwareRadio         = hardwareRadio,
+                            onLaunchHardwareRadio = onLaunchHardwareRadio,
+                            onStopHardwareRadio   = onStopHardwareRadio,
+                            onRadioSeekUp         = onRadioSeekUp,
+                            onRadioSeekDown       = onRadioSeekDown,
+                            onRadioCycleFm        = onRadioCycleFm,
+                            onRadioSwitchAm       = onRadioSwitchAm,
+                            onRadioTune           = onRadioTune
                         )
                         "TELEMETRY" -> TelemetryWidget(
                             location  = location,
@@ -417,20 +431,13 @@ fun HomeScreen(
                             isMetric  = settings.unitSystem == com.openlauncher.app.data.UnitSystem.METRIC,
                             accent    = accent,
                             isDayMode = isDayMode,
+                            digitalOnly = settings.speedometerDigitalOnly,
                             modifier  = Modifier.fillMaxSize()
-                        )
-                        "PIP_APP" -> com.openlauncher.app.ui.widget.PipWidget(
-                            packageName = settings.pipAppPackage,
-                            accent      = accent,
-                            isDayMode   = isDayMode,
-                            isEditing   = editMode,
-                            onLaunch    = onLaunchPip,
-                            onAssign    = onAssignPip,
-                            modifier    = Modifier.fillMaxSize()
                         )
                         "VITALS" -> VitalsWidget(
                             accent    = accent,
                             isDayMode = isDayMode,
+                            asBars    = settings.vitalsAsBars,
                             modifier  = Modifier.fillMaxSize()
                         )
                         "TRIP_TRACKER" -> TripTrackerWidget(
@@ -450,10 +457,9 @@ fun HomeScreen(
                         )
                     }
 
-                    // Label — hide when album art fills the widget background or PIP is showing WebView
+                    // Label — hide when album art fills the widget background
                     val labelColor = when {
                         w.id == "NOW_PLAYING" && nowPlaying?.albumArt != null && nowPlaying.title.isNotEmpty() -> Color.Transparent
-                        w.id == "PIP_APP" && settings.pipAppPackage.isNotEmpty() -> Color.Transparent
                         isDayMode -> Color(0xFF999999)
                         else      -> Color(0xFF3A3A3A)
                     }
@@ -478,9 +484,12 @@ fun HomeScreen(
             widgetId            = id,
             accent              = accent,
             clockStyle          = settings.clockStyle,
+            vitalsAsBars        = settings.vitalsAsBars,
+            speedometerDigitalOnly = settings.speedometerDigitalOnly,
             carPlayPackage      = settings.carPlayPackage,
             androidAutoPackage  = settings.androidAutoPackage,
             pipAppPackage       = settings.pipAppPackage,
+            isDayMode           = isDayMode,
             onResize            = { contextMenuId = null; resizingId = id },
             onAssignCarPlay     = { contextMenuId = null; onAssignCarPlay() },
             onAssignAndroidAuto = { contextMenuId = null; onAssignAndroidAuto() },
@@ -489,6 +498,8 @@ fun HomeScreen(
             onAssignPip         = { contextMenuId = null; onAssignPip() },
             onClearPip          = { contextMenuId = null; onClearPip() },
             onSetClockStyle     = { onSetClockStyle(it) },
+            onSetVitalsAsBars   = { onSetVitalsAsBars(it) },
+            onSetSpeedometerDigitalOnly = { onSetSpeedometerDigitalOnly(it) },
             onDismiss           = { contextMenuId = null }
         )
     }
@@ -500,6 +511,7 @@ fun HomeScreen(
             WidgetResizeDialog(
                 config    = config,
                 accent    = accent,
+                isDayMode = isDayMode,
                 onDismiss = { resizingId = null },
                 onConfirm = { sx, sy ->
                     onUpdateWidget(id, sx, sy)
@@ -514,6 +526,7 @@ fun HomeScreen(
         WidgetLibraryDialog(
             settings  = settings,
             accent    = accent,
+            isDayMode = isDayMode,
             onAdd     = { id -> onAddWidget(id) },
             onRemove  = { id -> onRemoveWidget(id) },
             onDismiss = { widgetLibraryOpen = false }
@@ -526,9 +539,12 @@ private fun WidgetContextMenu(
     widgetId: String,
     accent: Color,
     clockStyle: ClockStyle,
+    vitalsAsBars: Boolean,
+    speedometerDigitalOnly: Boolean,
     carPlayPackage: String = "",
     androidAutoPackage: String = "",
     pipAppPackage: String = "",
+    isDayMode: Boolean,
     onResize: () -> Unit,
     onAssignCarPlay: () -> Unit,
     onAssignAndroidAuto: () -> Unit,
@@ -537,12 +553,13 @@ private fun WidgetContextMenu(
     onAssignPip: () -> Unit,
     onClearPip: () -> Unit,
     onSetClockStyle: (ClockStyle) -> Unit,
+    onSetVitalsAsBars: (Boolean) -> Unit,
+    onSetSpeedometerDigitalOnly: (Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val isDayMode = LocalDayMode.current
-    val menuBg    = if (isDayMode) Color(0xFFF0F0F0) else Color(0xFF111111)
-    val menuBorder = if (isDayMode) Color(0xFFCCCCCC) else Color(0xFF1E1E1E)
-    val menuDivider = if (isDayMode) Color(0xFFDDDDDD) else Color(0xFF1A1A1A)
+    val menuBg    = if (isDayMode) Color(0xFFFFFFFF) else Color(0xFF111111)
+    val menuBorder = if (isDayMode) Color(0xFFDDE1E5) else Color(0xFF1E1E1E)
+    val menuDivider = if (isDayMode) Color(0xFFF1F3F5) else Color(0xFF1A1A1A)
     Dialog(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
@@ -553,51 +570,99 @@ private fun WidgetContextMenu(
                 .width(200.dp)
         ) {
             val inactiveMenuTint = if (isDayMode) Color(0xFF777777) else Color(0xFF555555)
-            if (widgetId != "PIP_APP") ContextRow("RESIZE", Icons.Default.OpenWith, accent, onResize)
+            ContextRow("RESIZE", Icons.Default.OpenWith, accent, onResize, isDayMode = isDayMode)
             if (widgetId == "CLOCK") {
                 HorizontalDivider(color = menuDivider)
                 ContextRow(
                     label   = "DIGITAL",
                     icon    = Icons.Default.Schedule,
                     tint    = if (clockStyle == ClockStyle.DIGITAL) accent else inactiveMenuTint,
-                    onClick = { onSetClockStyle(ClockStyle.DIGITAL) }
+                    onClick = { onSetClockStyle(ClockStyle.DIGITAL); onDismiss() },
+                    isDayMode = isDayMode
                 )
                 HorizontalDivider(color = menuDivider)
                 ContextRow(
                     label   = "ANALOG",
                     icon    = Icons.Default.Watch,
                     tint    = if (clockStyle == ClockStyle.ANALOG) accent else inactiveMenuTint,
-                    onClick = { onSetClockStyle(ClockStyle.ANALOG) }
+                    onClick = { onSetClockStyle(ClockStyle.ANALOG); onDismiss() },
+                    isDayMode = isDayMode
+                )
+            }
+            if (widgetId == "VITALS") {
+                HorizontalDivider(color = menuDivider)
+                ContextRow(
+                    label   = "DIAL GAUGES",
+                    icon    = Icons.Default.Adjust,
+                    tint    = if (!vitalsAsBars) accent else inactiveMenuTint,
+                    onClick = { onSetVitalsAsBars(false); onDismiss() },
+                    isDayMode = isDayMode
+                )
+                HorizontalDivider(color = menuDivider)
+                ContextRow(
+                    label   = "BARS VIEW",
+                    icon    = Icons.Default.FormatAlignLeft,
+                    tint    = if (vitalsAsBars) accent else inactiveMenuTint,
+                    onClick = { onSetVitalsAsBars(true); onDismiss() },
+                    isDayMode = isDayMode
+                )
+            }
+            if (widgetId == "SPEEDOMETER") {
+                HorizontalDivider(color = menuDivider)
+                ContextRow(
+                    label   = "DIAL TRACK",
+                    icon    = Icons.Default.Speed,
+                    tint    = if (!speedometerDigitalOnly) accent else inactiveMenuTint,
+                    onClick = { onSetSpeedometerDigitalOnly(false); onDismiss() },
+                    isDayMode = isDayMode
+                )
+                HorizontalDivider(color = menuDivider)
+                ContextRow(
+                    label   = "DIGITAL ONLY",
+                    icon    = Icons.Default.Dialpad,
+                    tint    = if (speedometerDigitalOnly) accent else inactiveMenuTint,
+                    onClick = { onSetSpeedometerDigitalOnly(true); onDismiss() },
+                    isDayMode = isDayMode
                 )
             }
             if (widgetId == "NOW_PLAYING") {
                 HorizontalDivider(color = menuDivider)
-                ContextRow("ASSIGN CARPLAY APP",      Icons.Default.PhoneAndroid,  accent, onAssignCarPlay)
+                ContextRow("ASSIGN CARPLAY APP",      Icons.Default.PhoneAndroid,  accent, onAssignCarPlay, isDayMode = isDayMode)
                 if (carPlayPackage.isNotEmpty()) {
                     HorizontalDivider(color = menuDivider)
-                    ContextRow("CLEAR CARPLAY APP", Icons.Default.PhoneAndroid, Color(0xFF884444), onClearCarPlay)
+                    ContextRow("CLEAR CARPLAY APP", Icons.Default.PhoneAndroid, Color(0xFF884444), onClearCarPlay, isDayMode = isDayMode)
                 }
                 HorizontalDivider(color = menuDivider)
-                ContextRow("ASSIGN ANDROID AUTO APP", Icons.Default.DirectionsCar, accent, onAssignAndroidAuto)
+                ContextRow("ASSIGN ANDROID AUTO APP", Icons.Default.DirectionsCar, accent, onAssignAndroidAuto, isDayMode = isDayMode)
                 if (androidAutoPackage.isNotEmpty()) {
                     HorizontalDivider(color = menuDivider)
-                    ContextRow("CLEAR ANDROID AUTO APP", Icons.Default.DirectionsCar, Color(0xFF884444), onClearAndroidAuto)
+                    ContextRow("CLEAR ANDROID AUTO APP", Icons.Default.DirectionsCar, Color(0xFF884444), onClearAndroidAuto, isDayMode = isDayMode)
                 }
             }
-            if (widgetId == "PIP_APP") {
-                HorizontalDivider(color = menuDivider)
-                ContextRow("ASSIGN APP", Icons.Default.WebAsset, accent, onAssignPip)
-                if (pipAppPackage.isNotEmpty()) {
-                    HorizontalDivider(color = menuDivider)
-                    ContextRow("CLEAR APP", Icons.Default.WebAsset, Color(0xFF884444), onClearPip)
-                }
-            }
+
         }
     }
 }
 
 @Composable
-private fun ContextRow(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, onClick: () -> Unit) {
+private fun ContextRow(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tint: Color,
+    onClick: () -> Unit,
+    isDayMode: Boolean = false
+) {
+    val finalTint = if (isDayMode) {
+        if (tint == Color(0xFF884444)) {
+            tint
+        } else if (tint == Color(0xFF777777)) {
+            Color(0xFF888888)
+        } else {
+            Color(0xFF111111)
+        }
+    } else {
+        tint
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -606,8 +671,8 @@ private fun ContextRow(label: String, icon: androidx.compose.ui.graphics.vector.
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Icon(icon, null, tint = tint, modifier = Modifier.size(16.dp))
-        Text(label, color = tint, fontSize = 10.sp, letterSpacing = 1.sp)
+        Icon(icon, null, tint = finalTint, modifier = Modifier.size(16.dp))
+        Text(label, color = finalTint, fontSize = 10.sp, letterSpacing = 1.sp)
     }
 }
 
@@ -615,6 +680,7 @@ private fun ContextRow(label: String, icon: androidx.compose.ui.graphics.vector.
 private fun WidgetResizeDialog(
     config: WidgetConfig,
     accent: Color,
+    isDayMode: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (spanX: Int, spanY: Int) -> Unit
 ) {
@@ -624,10 +690,9 @@ private fun WidgetResizeDialog(
     val maxSpanX = GRID_COLS - config.gridX
     val maxSpanY = GRID_ROWS - config.gridY
 
-    val isDayMode    = LocalDayMode.current
-    val dialogBg     = if (isDayMode) Color(0xFFF0F0F0) else Color(0xFF0E0E0E)
-    val dialogText   = if (isDayMode) Color(0xFF111111) else Color.White
-    val cancelColor  = if (isDayMode) Color(0xFF888888) else Color(0xFF555555)
+    val dialogBg     = if (isDayMode) Color(0xFFFFFFFF) else MaterialTheme.colorScheme.background
+    val dialogText   = if (isDayMode) Color(0xFF111111) else MaterialTheme.colorScheme.onBackground
+    val cancelColor  = if (isDayMode) Color(0xFF6C757D) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -640,8 +705,8 @@ private fun WidgetResizeDialog(
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                SpanRow(label = "WIDTH",  value = spanX, min = 1, max = maxSpanX, accent = accent) { spanX = it }
-                SpanRow(label = "HEIGHT", value = spanY, min = 1, max = maxSpanY, accent = accent) { spanY = it }
+                SpanRow(label = "WIDTH",  value = spanX, min = 1, max = maxSpanX, accent = accent, isDayMode = isDayMode) { spanX = it }
+                SpanRow(label = "HEIGHT", value = spanY, min = 1, max = maxSpanY, accent = accent, isDayMode = isDayMode) { spanY = it }
             }
         },
         confirmButton = {
@@ -667,13 +732,13 @@ private fun SpanRow(
     min: Int,
     max: Int,
     accent: Color,
+    isDayMode: Boolean,
     onChange: (Int) -> Unit
 ) {
-    val isDayMode   = LocalDayMode.current
-    val textColor   = if (isDayMode) Color(0xFF111111) else Color.White
-    val dimColor    = if (isDayMode) Color(0xFF888888) else Color(0xFF666666)
-    val disabledC   = if (isDayMode) Color(0xFFCCCCCC) else Color(0xFF333333)
-    val inactiveBg  = if (isDayMode) Color(0xFFCCCCCC) else Color(0xFF2A2A2A)
+    val textColor   = if (isDayMode) Color(0xFF111111) else MaterialTheme.colorScheme.onBackground
+    val dimColor    = if (isDayMode) Color(0xFF495057) else Color(0xFF666666)
+    val disabledC   = if (isDayMode) Color(0xFFCED4DA) else Color(0xFF333333)
+    val inactiveBg  = if (isDayMode) Color(0xFFE9ECEF) else Color(0xFF2A2A2A)
     Row(
         verticalAlignment     = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -734,15 +799,15 @@ private fun SpanRow(
 private fun WidgetLibraryDialog(
     settings: AppSettings,
     accent: Color,
+    isDayMode: Boolean,
     onAdd: (String) -> Unit,
     onRemove: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val isDayMode   = LocalDayMode.current
-    val dialogBg    = if (isDayMode) Color(0xFFF0F0F0) else Color(0xFF0C0C0C)
+    val dialogBg    = if (isDayMode) Color(0xFFEEEEEE) else Color(0xFF0C0C0C)
     val dialogBorder = if (isDayMode) Color(0xFFCCCCCC) else Color(0xFF1E1E1E)
-    val titleColor  = if (isDayMode) Color(0xFF888888) else Color(0xFF555555)
-    val closeColor  = if (isDayMode) Color(0xFF777777) else Color(0xFF444444)
+    val titleColor  = if (isDayMode) Color(0xFF495057) else Color(0xFF555555)
+    val closeColor  = if (isDayMode) Color(0xFF495057) else Color(0xFF444444)
 
     val activeIds = buildSet {
         if (settings.showClock) add("CLOCK")
@@ -751,7 +816,6 @@ private fun WidgetLibraryDialog(
         if (settings.showTelemetry) add("TELEMETRY")
         if (settings.showAltimeter) add("ALTIMETER")
         if (settings.showSpeedometer) add("SPEEDOMETER")
-        if (settings.showPip) add("PIP_APP")
         if (settings.showVitals) add("VITALS")
         if (settings.showTripTracker) add("TRIP_TRACKER")
         if (settings.showSoundboard) add("SOUNDBOARD")
@@ -796,6 +860,7 @@ private fun WidgetLibraryDialog(
                         isActive = isActive,
                         canAdd   = canAdd,
                         accent   = accent,
+                        isDayMode = isDayMode,
                         onToggle = { if (isActive) onRemove(info.id) else onAdd(info.id) }
                     )
                 }
@@ -805,7 +870,7 @@ private fun WidgetLibraryDialog(
                 Spacer(Modifier.height(10.dp))
                 Text(
                     text          = "ALL 6 CELLS OCCUPIED — REMOVE A WIDGET TO ADD MORE",
-                    color         = if (isDayMode) Color(0xFF888888) else Color(0xFF3A3A3A),
+                    color         = if (isDayMode) Color(0xFFE03131) else Color(0xFF3A3A3A),
                     fontSize      = 8.sp,
                     letterSpacing = 1.sp,
                     modifier      = Modifier.fillMaxWidth(),
@@ -822,14 +887,14 @@ private fun WidgetLibraryCard(
     isActive: Boolean,
     canAdd: Boolean,
     accent: Color,
+    isDayMode: Boolean,
     onToggle: () -> Unit
 ) {
-    val isDayMode  = LocalDayMode.current
     val enabled    = isActive || canAdd
-    val cardBorder = if (isActive) accent.copy(alpha = 0.35f) else if (isDayMode) Color(0xFFCCCCCC) else Color(0xFF1A1A1A)
-    val cardBg     = if (isActive) accent.copy(alpha = 0.07f) else if (isDayMode) Color(0xFFFFFFFF) else Color(0xFF0E0E0E)
-    val iconTint   = if (isActive) accent else if (isDayMode) Color(0xFF888888) else Color(0xFF333333)
-    val labelColor = if (isActive) accent else if (isDayMode) Color(0xFF888888) else Color(0xFF3A3A3A)
+    val cardBorder = if (isActive) accent else if (isDayMode) Color(0xFFCCCCCC) else Color(0xFF1A1A1A)
+    val cardBg     = if (isActive) accent.copy(alpha = 0.15f) else if (isDayMode) Color(0xFFFFFFFF) else Color(0xFF0E0E0E)
+    val iconTint   = if (isActive) accent else if (isDayMode) Color(0xFF495057) else Color(0xFF333333)
+    val labelColor = if (isActive) accent else if (isDayMode) Color(0xFF212529) else Color(0xFF3A3A3A)
 
     Column(
         modifier = Modifier
@@ -862,9 +927,9 @@ private fun WidgetLibraryCard(
                 else     -> "ADD"
             },
             color         = when {
-                isActive -> accent.copy(alpha = 0.55f)
-                !canAdd  -> if (isDayMode) Color(0xFFBBBBBB) else Color(0xFF282828)
-                else     -> if (isDayMode) Color(0xFF999999) else Color(0xFF3A3A3A)
+                isActive -> accent.copy(alpha = 0.75f)
+                !canAdd  -> if (isDayMode) Color(0xFFADB5BD) else Color(0xFF282828)
+                else     -> if (isDayMode) Color(0xFF495057) else Color(0xFF3A3A3A)
             },
             fontSize      = 6.sp,
             letterSpacing = 1.sp,

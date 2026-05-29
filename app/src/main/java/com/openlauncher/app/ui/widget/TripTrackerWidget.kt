@@ -34,13 +34,13 @@ fun TripTrackerWidget(
     modifier: Modifier = Modifier
 ) {
     // Master design system colors aligned with Vitals, Compass, Clock, and Altimeter
-    val displayColor = if (isDayMode) Color(0xFF111111) else Color.White
-    val dimDisplayColor = if (isDayMode) Color(0xFF111111).copy(alpha = 0.08f) else Color.White.copy(alpha = 0.08f)
+    val displayColor = if (isDayMode) Color(0xFF111111) else androidx.compose.material3.MaterialTheme.colorScheme.onBackground
+    val dimDisplayColor = if (isDayMode) Color(0xFF111111).copy(alpha = 0.08f) else androidx.compose.material3.MaterialTheme.colorScheme.onBackground.copy(alpha = 0.08f)
     
     val lcdBg = Color.Transparent
-    val lcdBorder = if (isDayMode) Color(0xFFCCCCCC) else Color.White.copy(alpha = 0.12f)
+    val lcdBorder = if (isDayMode) Color(0xFFCCCCCC) else androidx.compose.material3.MaterialTheme.colorScheme.onBackground.copy(alpha = 0.12f)
     
-    val labelColor = if (isDayMode) Color(0xFF888888) else Color.White.copy(alpha = 0.30f)
+    val labelColor = if (isDayMode) Color(0xFF888888) else androidx.compose.material3.MaterialTheme.colorScheme.onBackground.copy(alpha = 0.30f)
     
     // Safety accents mapped elegantly to the dynamic accent color
     val activeAccent = accent
@@ -575,7 +575,7 @@ private fun TeTactileButton(
     onClick: () -> Unit,
     isDayMode: Boolean
 ) {
-    val printedLabelColor = if (isDayMode) Color(0xFF666666) else Color.White.copy(alpha = 0.35f)
+    val printedLabelColor = if (isDayMode) Color(0xFF666666) else androidx.compose.material3.MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f)
     
     val buttonBg = if (!enabled) {
         Color.Transparent

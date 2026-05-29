@@ -154,7 +154,7 @@ fun OnboardingScreen(
                 }
 
                 Text(
-                    text = "v0.0.2",
+                    text = "v0.0.4",
                     color = Color(0xFF333333),
                     fontSize = 9.sp,
                     letterSpacing = 1.sp
@@ -354,8 +354,8 @@ private fun IntroStep(accent: Color) {
 
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             BulletItem(Icons.Default.CloudOff, "100% Offline-Based", "No reliance on a mobile signal or network connection to function. Speedometer, compass telemetry, and altimeter operate entirely offline.")
-            BulletItem(Icons.Default.Palette, "Highly Customizable Dashboard", "Tailor color accents, typography weights, system units, and drag-and-drop to rearrange your dashboard tiles.")
-            BulletItem(Icons.Default.Layers, "App Picture-in-Picture (Coming Soon)", "Ready for system-level headunit integration to embed live maps directly onto your cards.")
+            BulletItem(Icons.Default.Palette, "Highly Customizable Dashboard", "Tailor color accents, background gradients, typography fonts, system units, and drag-and-drop to rearrange your tiles.")
+            BulletItem(Icons.Default.VolumeUp, "Soundboard & Media Shortcuts", "Trigger custom soundboard sound effects, manage CarPlay & Android Auto shortcuts, and control active media players.")
         }
     }
 }

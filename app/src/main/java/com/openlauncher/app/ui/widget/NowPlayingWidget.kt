@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,15 +32,18 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.absoluteValue
 import com.openlauncher.app.model.NowPlayingState
 import com.openlauncher.app.service.MediaListenerService
 import java.util.Random
@@ -61,7 +65,15 @@ fun NowPlayingWidget(
     onTapToOpenApp: () -> Unit,
     modifier: Modifier = Modifier,
     isEditing: Boolean = false,
-    isDayMode: Boolean = false
+    isDayMode: Boolean = false,
+    hardwareRadio: com.openlauncher.app.viewmodel.LauncherViewModel.HardwareRadioState? = null,
+    onLaunchHardwareRadio: () -> Unit = {},
+    onStopHardwareRadio: () -> Unit = {},
+    onRadioSeekUp: () -> Unit = {},
+    onRadioSeekDown: () -> Unit = {},
+    onRadioCycleFm: () -> Unit = {},
+    onRadioSwitchAm: () -> Unit = {},
+    onRadioTune: (band: String, freq: Float) -> Unit = { _, _ -> }
 ) {
     val context     = LocalContext.current
     val isConnected by MediaListenerService.isConnected.collectAsState()
@@ -70,6 +82,12 @@ fun NowPlayingWidget(
     val hasContent  = state != null && state.title.isNotEmpty()
 
     var selectedSource by rememberSaveable { mutableStateOf("Any Player") }
+
+    // Auto-switch to radio view when hardware radio is detected
+    LaunchedEffect(hardwareRadio) {
+        if (hardwareRadio != null) selectedSource = "FM/AM Radio"
+        else if (selectedSource == "FM/AM Radio") selectedSource = "Any Player"
+    }
 
     Box(
         modifier = modifier
@@ -101,6 +119,14 @@ fun NowPlayingWidget(
                     isConnected = isConnected,
                     hasCarPlay = hasCarPlay,
                     hasAutoApp = hasAutoApp,
+                    hardwareRadio = hardwareRadio,
+                    onLaunchHardwareRadio = onLaunchHardwareRadio,
+                    onStopHardwareRadio = onStopHardwareRadio,
+                    onRadioSeekUp = onRadioSeekUp,
+                    onRadioSeekDown = onRadioSeekDown,
+                    onRadioCycleFm = onRadioCycleFm,
+                    onRadioSwitchAm = onRadioSwitchAm,
+                    onRadioTune = onRadioTune,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -127,7 +153,7 @@ fun NowPlayingWidget(
 
         // 2. FLOATING MULTI-SOURCE SELECTOR (Top-Right, always overlayed)
         var menuExpanded by remember { mutableStateOf(false) }
-        val selectorIconColor = if (isDayMode) Color.Black.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.4f)
+        val selectorIconColor = if (isDayMode) Color.Black.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
         
         Box(
             modifier = Modifier
@@ -145,13 +171,15 @@ fun NowPlayingWidget(
                     modifier = Modifier.size(16.dp)
                 )
             }
+            val dropdownBg   = if (isDayMode) Color(0xFFF0F0F0) else MaterialTheme.colorScheme.background
+            val dropdownText = if (isDayMode) Color(0xFF111111) else MaterialTheme.colorScheme.onBackground
             DropdownMenu(
                 expanded = menuExpanded,
                 onDismissRequest = { menuExpanded = false },
-                modifier = Modifier.background(Color(0xFF141414))
+                modifier = Modifier.background(dropdownBg)
             ) {
                 DropdownMenuItem(
-                    text = { Text("Any Player", color = Color.White, fontSize = 11.sp) },
+                    text = { Text("Any Player", color = dropdownText, fontSize = 11.sp) },
                     onClick = {
                         selectedSource = "Any Player"
                         menuExpanded = false
@@ -159,7 +187,7 @@ fun NowPlayingWidget(
                     leadingIcon = { Icon(Icons.Default.MusicNote, null, tint = accent, modifier = Modifier.size(14.dp)) }
                 )
                 DropdownMenuItem(
-                    text = { Text("FM/AM Radio", color = Color.White, fontSize = 11.sp) },
+                    text = { Text("FM/AM Radio", color = dropdownText, fontSize = 11.sp) },
                     onClick = {
                         selectedSource = "FM/AM Radio"
                         menuExpanded = false
@@ -190,10 +218,24 @@ fun PioneerDEHP7600MPDeck(
     isConnected: Boolean,
     hasCarPlay: Boolean,
     hasAutoApp: Boolean,
+    hardwareRadio: com.openlauncher.app.viewmodel.LauncherViewModel.HardwareRadioState? = null,
+    onLaunchHardwareRadio: () -> Unit = {},
+    onStopHardwareRadio: () -> Unit = {},
+    onRadioSeekUp: () -> Unit = {},
+    onRadioSeekDown: () -> Unit = {},
+    onRadioCycleFm: () -> Unit = {},
+    onRadioSwitchAm: () -> Unit = {},
+    onRadioTune: (band: String, freq: Float) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
-    var isPowerOn by rememberSaveable { mutableStateOf(true) }
-    var isMuted by rememberSaveable { mutableStateOf(false) }
+    var isPowerOn     by rememberSaveable { mutableStateOf(true) }
+    var isManuallyOff by remember { mutableStateOf(false) }
+    var isMuted       by rememberSaveable { mutableStateOf(false) }
+
+    // If hardware radio reconnects after being stopped, clear the manual-off flag
+    LaunchedEffect(hardwareRadio) {
+        if (hardwareRadio != null && isManuallyOff) isManuallyOff = false
+    }
     var band by rememberSaveable { mutableStateOf("FM1") }
     var radioFreq by rememberSaveable { mutableStateOf(99.9f) }
     var isSeeking by remember { mutableStateOf(false) }
@@ -202,17 +244,36 @@ fun PioneerDEHP7600MPDeck(
     var fmPresets by rememberSaveable { mutableStateOf(listOf(88.5f, 91.5f, 98.1f, 101.9f, 104.3f, 107.5f)) }
     var amPresets by rememberSaveable { mutableStateOf(listOf(540f, 680f, 820f, 1040f, 1260f, 1420f)) }
 
+    val hasHardware = hardwareRadio != null
+    val hwBand = hardwareRadio?.band
+    val hwFreq = hardwareRadio?.freq
+    val displayBand = if (hasHardware) hwBand!! else band
+    val hwFreqFloat = hwFreq?.replace(Regex("[^0-9.]"), "")?.toFloatOrNull()
+    val displayFreqText = if (hasHardware) hwFreq!! else {
+        if (band.startsWith("FM")) "%.1f".format(radioFreq) else "%.0f".format(radioFreq)
+    }
+    val displayUnit = if (hasHardware) {
+        if (hwBand!!.startsWith("AM")) "kHz" else "MHz"
+    } else {
+        if (band.startsWith("FM")) "MHz" else "kHz"
+    }
+
     val fmStations = listOf(88.5f, 91.5f, 98.1f, 101.9f, 104.3f, 107.5f)
     val amStations = listOf(540f, 680f, 820f, 1040f, 1260f, 1420f)
 
-    val activeStations  = if (band.startsWith("FM")) fmStations else amStations
-    val currentPresets  = if (band.startsWith("FM")) fmPresets  else amPresets
-    val fmTolerance     = if (band.startsWith("FM")) 0.15f else 5f
-    val isActiveStation = activeStations.any { abs(radioFreq - it) < fmTolerance }
+    val activeStations  = if (displayBand.startsWith("FM")) fmStations else amStations
+    val currentPresets  = if (displayBand.startsWith("FM")) fmPresets  else amPresets
+    val fmTolerance     = if (displayBand.startsWith("FM")) 0.15f else 5f
+    val isActiveStation = if (hasHardware) {
+        hwFreqFloat != null && activeStations.any { abs(hwFreqFloat - it) < fmTolerance }
+    } else {
+        activeStations.any { abs(radioFreq - it) < fmTolerance }
+    }
 
     val synth = remember { CyberRadioSynth() }
-    DisposableEffect(isPowerOn, radioFreq, isActiveStation, isMuted, selectedSource) {
-        if (isPowerOn && selectedSource == "FM/AM Radio") {
+    // Only run the demo synth when there's no hardware radio available
+    DisposableEffect(isPowerOn, radioFreq, isActiveStation, isMuted, selectedSource, hasHardware) {
+        if (!hasHardware && isPowerOn && selectedSource == "FM/AM Radio") {
             synth.setParams(radioFreq, isActiveStation, isPowerOn, isMuted)
             synth.start()
         } else {
@@ -243,217 +304,179 @@ fun PioneerDEHP7600MPDeck(
 
     val stationName = if (!isPowerOn || isMuted) "" else if (isActiveStation) {
         when {
-            band.startsWith("FM") -> when {
-                abs(radioFreq - 88.5f)  < 0.15f -> "NIGHTDRIVE FM"
-                abs(radioFreq - 91.5f)  < 0.15f -> "NEON RETRO 91.5"
-                abs(radioFreq - 98.1f)  < 0.15f -> "RECEIVER VFD-8"
-                abs(radioFreq - 101.9f) < 0.15f -> "CYBERPUNK RADIO"
-                abs(radioFreq - 104.3f) < 0.15f -> "SYNTHWAVE CHILL"
-                abs(radioFreq - 107.5f) < 0.15f -> "RADICAL FM"
+            displayBand.startsWith("FM") -> when {
+                abs((hwFreqFloat ?: radioFreq) - 88.5f)  < 0.15f -> "NIGHTDRIVE FM"
+                abs((hwFreqFloat ?: radioFreq) - 91.5f)  < 0.15f -> "NEON RETRO 91.5"
+                abs((hwFreqFloat ?: radioFreq) - 98.1f)  < 0.15f -> "RECEIVER VFD-8"
+                abs((hwFreqFloat ?: radioFreq) - 101.9f) < 0.15f -> "CYBERPUNK RADIO"
+                abs((hwFreqFloat ?: radioFreq) - 104.3f) < 0.15f -> "SYNTHWAVE CHILL"
+                abs((hwFreqFloat ?: radioFreq) - 107.5f) < 0.15f -> "RADICAL FM"
                 else -> "STATION"
             }
             else -> when {
-                abs(radioFreq - 540f)  < 5f -> "NEWS 540"
-                abs(radioFreq - 680f)  < 5f -> "TRAFFIC RADAR"
-                abs(radioFreq - 820f)  < 5f -> "COMMUTER TALK"
-                abs(radioFreq - 1040f) < 5f -> "SPORT CLASH"
-                abs(radioFreq - 1260f) < 5f -> "WEATHER ADVISORY"
-                abs(radioFreq - 1420f) < 5f -> "GOLD RETRO"
+                abs((hwFreqFloat ?: radioFreq) - 540f)  < 5f -> "NEWS 540"
+                abs((hwFreqFloat ?: radioFreq) - 680f)  < 5f -> "TRAFFIC RADAR"
+                abs((hwFreqFloat ?: radioFreq) - 820f)  < 5f -> "COMMUTER TALK"
+                abs((hwFreqFloat ?: radioFreq) - 1040f) < 5f -> "SPORT CLASH"
+                abs((hwFreqFloat ?: radioFreq) - 1260f) < 5f -> "WEATHER ADVISORY"
+                abs((hwFreqFloat ?: radioFreq) - 1420f) < 5f -> "GOLD RETRO"
                 else -> "STATION"
             }
         }
     } else if (isSeeking) "SCANNING" else "NO SIGNAL"
 
-    val contentColor = if (isDayMode) Color(0xFF111111) else Color.White
-    val dimColor     = if (isDayMode) Color(0xFF888888) else Color(0xFF555555)
-    val borderColor  = if (isDayMode) Color(0xFFE5E7EB) else Color(0xFF1D2024)
+    val contentColor  = if (isDayMode) Color(0xFF111111) else MaterialTheme.colorScheme.onBackground
+    val dimColor      = if (isDayMode) Color(0xFF444444) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+    val borderColor   = if (isDayMode) Color(0xFF777777) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.15f)
+
+    val powerOn       = (hasHardware || isPowerOn) && !isManuallyOff
+    val chipInactiveBg = if (isDayMode) Color(0xFFE0E0E0) else Color(0xFF1A1A1A)
+    // Active chip uses inverted bg for guaranteed contrast regardless of accent color
+    val chipActiveBg   = if (isDayMode) Color(0xFF222222) else Color(0xFFDDDDDD)
+    val chipActiveText = if (isDayMode) Color.White else Color(0xFF111111)
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        // ── Header: band chips + stereo dot + power ───────────────────────────
+        // ── Row 1: Band chips (left) + Power button (right) ───────────────────
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                listOf("FM1", "FM2", "AM").forEach { b ->
-                    val active = band == b && isPowerOn
+            // Band selector — each chip is clearly visible active or inactive
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                listOf("FM1", "FM2", "FM3", "AM").forEach { b ->
+                    val active = if (hasHardware) displayBand == b else (band == b && isPowerOn)
+                    val onClick: () -> Unit = if (hasHardware) {
+                        if (b == "AM") onRadioSwitchAm else onRadioCycleFm
+                    } else {
+                        { band = b; radioFreq = if (b.startsWith("FM")) 99.9f else 1040f; isSeeking = false; isMuted = false }
+                    }
                     Box(
                         modifier = Modifier
-                            .height(16.dp)
-                            .border(
-                                1.dp,
-                                if (active) accent else borderColor,
-                                RoundedCornerShape(2.dp)
-                            )
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(if (active) accent.copy(alpha = 0.12f) else Color.Transparent)
-                            .clickable {
-                                band = b
-                                radioFreq = if (b.startsWith("FM")) 99.9f else 1040f
-                                isSeeking = false
-                                isMuted = false
-                            }
-                            .padding(horizontal = 6.dp),
+                            .height(22.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(if (active) chipActiveBg else chipInactiveBg)
+                            .border(1.dp, if (active) borderColor else borderColor.copy(alpha = 0.5f), RoundedCornerShape(3.dp))
+                            .clickable { onClick() }
+                            .padding(horizontal = 8.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             b,
-                            color = if (active) accent else dimColor,
-                            fontSize = 7.sp,
+                            color = if (active) chipActiveText else dimColor,
+                            fontSize = 8.sp,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.sp
+                            letterSpacing = 0.5.sp
                         )
                     }
                 }
             }
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            // Power button — inverted fill same as active chip for consistent contrast
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(if (powerOn) chipActiveBg else chipInactiveBg)
+                    .border(1.5.dp, borderColor, CircleShape)
+                    .clickable {
+                        if (powerOn) {
+                            onStopHardwareRadio(); isManuallyOff = true; isPowerOn = false; isSeeking = false
+                        } else {
+                            onLaunchHardwareRadio(); isManuallyOff = false; isPowerOn = true
+                        }
+                    },
+                contentAlignment = Alignment.Center
             ) {
-                if (isPowerOn && isActiveStation && !isMuted) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Text(
-                            "ST",
-                            color = dimColor,
-                            fontSize = 7.sp,
-                            fontFamily = FontFamily.Monospace
-                        )
-                        Box(
-                            modifier = Modifier
-                                .size(5.dp)
-                                .clip(CircleShape)
-                                .background(accent)
-                        )
-                    }
-                }
-                Box(
-                    modifier = Modifier
-                        .size(18.dp)
-                        .clip(CircleShape)
-                        .background(if (!isPowerOn) accent.copy(alpha = 0.12f) else Color.Transparent)
-                        .border(1.dp, if (!isPowerOn) accent else borderColor, CircleShape)
-                        .clickable { isPowerOn = !isPowerOn; if (!isPowerOn) isSeeking = false },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.PowerSettingsNew,
-                        contentDescription = "PWR",
-                        tint = if (!isPowerOn) accent else dimColor,
-                        modifier = Modifier.size(10.dp)
-                    )
-                }
+                Icon(
+                    Icons.Default.PowerSettingsNew, "PWR",
+                    tint = if (powerOn) chipActiveText else dimColor,
+                    modifier = Modifier.size(16.dp)
+                )
             }
         }
 
-        // ── Frequency display ─────────────────────────────────────────────────
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Row(
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                val freqText = if (band.startsWith("FM")) "%.1f".format(radioFreq)
-                               else "%.0f".format(radioFreq)
-                val unitText = if (band.startsWith("FM")) "MHz" else "kHz"
+        // ── Row 2: Frequency display ──────────────────────────────────────────
+        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    freqText,
-                    color = if (isPowerOn && !isMuted) contentColor else contentColor.copy(alpha = 0.25f),
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Light,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 0.sp
+                    displayFreqText,
+                    color = if (powerOn || hasHardware) contentColor else contentColor.copy(alpha = 0.3f),
+                    fontSize = 34.sp, fontWeight = FontWeight.Light,
+                    fontFamily = FontFamily.Monospace, letterSpacing = 0.sp
                 )
                 Text(
-                    unitText,
-                    color = dimColor,
-                    fontSize = 9.sp,
+                    displayUnit,
+                    color = dimColor, fontSize = 10.sp,
                     fontFamily = FontFamily.Monospace,
                     modifier = Modifier.padding(bottom = 5.dp)
                 )
             }
-            Text(
-                text = when {
-                    !isPowerOn -> "RADIO OFF"
-                    isMuted    -> "MUTED"
-                    else       -> stationName
-                }.uppercase(),
-                color = when {
-                    !isPowerOn -> dimColor.copy(alpha = 0.5f)
-                    isMuted    -> accent.copy(alpha = 0.6f)
-                    isActiveStation && !isSeeking -> accent
-                    else -> dimColor
-                },
-                fontSize = 8.sp,
-                fontFamily = FontFamily.Monospace,
-                letterSpacing = 1.5.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = when {
+                        !powerOn && !hasHardware -> "RADIO OFF"
+                        hasHardware              -> "LIVE"
+                        isMuted                  -> "MUTED"
+                        else                     -> stationName
+                    }.uppercase(),
+                    color = when {
+                        !powerOn && !hasHardware     -> dimColor.copy(alpha = 0.5f)
+                        hasHardware                  -> accent
+                        isMuted                      -> accent.copy(alpha = 0.6f)
+                        isActiveStation && !isSeeking -> accent
+                        else                         -> dimColor
+                    },
+                    fontSize = 8.sp, fontFamily = FontFamily.Monospace,
+                    letterSpacing = 1.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+                if (hasHardware) {
+                    Box(modifier = Modifier.size(5.dp).clip(CircleShape).background(accent))
+                }
+            }
         }
 
-        // ── Controls: SEEK ◄ | MUT | SEEK ► ──────────────────────────────────
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        // ── Row 3: Seek controls ──────────────────────────────────────────────
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             RadioFlatButton(
                 label = "◄ SEEK",
-                enabled = isPowerOn,
-                active = isSeeking && seekDirection == -1,
-                accent = accent,
-                borderColor = borderColor,
-                dimColor = dimColor,
+                enabled = if (hasHardware) true else isPowerOn,
+                active = !hasHardware && isSeeking && seekDirection == -1,
+                accent = accent, borderColor = borderColor, dimColor = dimColor,
                 modifier = Modifier.weight(1f),
                 onClick = {
-                    if (isSeeking && seekDirection == -1) {
-                        isSeeking = false
-                    } else {
-                        seekDirection = -1
-                        isSeeking = true
-                        isMuted = false
-                    }
+                    if (hasHardware) onRadioSeekDown()
+                    else if (isSeeking && seekDirection == -1) isSeeking = false
+                    else { seekDirection = -1; isSeeking = true; isMuted = false }
                 }
             )
             RadioFlatButton(
-                label = "MUT",
-                enabled = isPowerOn,
-                active = isMuted,
-                accent = accent,
-                borderColor = borderColor,
-                dimColor = dimColor,
+                label = if (hasHardware) "OPEN" else "MUT",
+                enabled = true,
+                active = !hasHardware && isMuted,
+                accent = accent, borderColor = borderColor, dimColor = dimColor,
                 modifier = Modifier.weight(1f),
-                onClick = { isMuted = !isMuted; if (isMuted) isSeeking = false }
+                onClick = {
+                    if (hasHardware) onLaunchHardwareRadio()
+                    else { isMuted = !isMuted; if (isMuted) isSeeking = false }
+                }
             )
             RadioFlatButton(
                 label = "SEEK ►",
-                enabled = isPowerOn,
-                active = isSeeking && seekDirection == 1,
-                accent = accent,
-                borderColor = borderColor,
-                dimColor = dimColor,
+                enabled = if (hasHardware) true else isPowerOn,
+                active = !hasHardware && isSeeking && seekDirection == 1,
+                accent = accent, borderColor = borderColor, dimColor = dimColor,
                 modifier = Modifier.weight(1f),
                 onClick = {
-                    if (isSeeking && seekDirection == 1) {
-                        isSeeking = false
-                    } else {
-                        seekDirection = 1
-                        isSeeking = true
-                        isMuted = false
-                    }
+                    if (hasHardware) onRadioSeekUp()
+                    else if (isSeeking && seekDirection == 1) isSeeking = false
+                    else { seekDirection = 1; isSeeking = true; isMuted = false }
                 }
             )
         }
@@ -464,25 +487,69 @@ fun PioneerDEHP7600MPDeck(
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             for (pIdx in 0 until 6) {
-                val presetFreq   = currentPresets[pIdx]
-                val isTuned      = isPowerOn && !isSeeking && abs(radioFreq - presetFreq) < fmTolerance
-                val displayFreq  = if (band.startsWith("FM")) "%.1f".format(presetFreq)
-                                   else "%.0f".format(presetFreq / 10f)
+                val presetFreq  = currentPresets[pIdx]
+                val hwFreqFloat = hwFreq?.toFloatOrNull()
+                val isTuned = if (hasHardware) {
+                    hwFreqFloat != null && abs(hwFreqFloat - presetFreq) < fmTolerance
+                } else {
+                    isPowerOn && !isSeeking && abs(radioFreq - presetFreq) < fmTolerance
+                }
+                val displayFreq = if (displayBand.startsWith("FM")) "%.1f".format(presetFreq)
+                                  else "%.0f".format(presetFreq)  // AM already in kHz
+                val presetBg = when {
+                    isTuned && isDayMode -> Color(0xFF222222)
+                    isTuned              -> accent.copy(alpha = 0.12f)
+                    else                 -> Color.Transparent
+                }
+                val presetBorderColor = when {
+                    isTuned && isDayMode -> Color(0xFF222222)
+                    isTuned              -> accent
+                    isDayMode            -> Color(0xFFCCCCCC)
+                    else                 -> Color(0xFF1D2024)
+                }
+                val presetNumColor = when {
+                    isTuned && isDayMode -> Color.White
+                    isTuned              -> accent
+                    isDayMode            -> Color(0xFF444444)
+                    else                 -> Color(0xFF777777)
+                }
+                val presetFreqColor = when {
+                    isTuned && isDayMode -> Color.White.copy(alpha = 0.9f)
+                    isTuned              -> accent.copy(alpha = 0.9f)
+                    isDayMode            -> Color(0xFF666666)
+                    else                 -> Color(0xFF777777).copy(alpha = 0.7f)
+                }
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(24.dp)
-                        .border(1.dp, if (isTuned) accent else borderColor, RoundedCornerShape(2.dp))
+                        .height(28.dp)
+                        .border(1.dp, presetBorderColor, RoundedCornerShape(2.dp))
                         .clip(RoundedCornerShape(2.dp))
-                        .background(if (isTuned) accent.copy(alpha = 0.12f) else Color.Transparent)
+                        .background(presetBg)
                         .combinedClickable(
-                            enabled = isPowerOn,
-                            onClick = { radioFreq = presetFreq; isMuted = false; isSeeking = false },
+                            enabled = if (hasHardware) true else isPowerOn,
+                            onClick = {
+                                android.util.Log.d("RadioPresets", "Preset clicked: index=$pIdx, freq=$presetFreq, hasHardware=$hasHardware, displayBand=$displayBand")
+                                if (hasHardware) {
+                                    onRadioTune(displayBand, presetFreq)
+                                } else {
+                                    radioFreq = presetFreq; isMuted = false; isSeeking = false
+                                }
+                            },
                             onLongClick = {
-                                if (band.startsWith("FM"))
-                                    fmPresets = fmPresets.toMutableList().also { it[pIdx] = radioFreq }
-                                else
-                                    amPresets = amPresets.toMutableList().also { it[pIdx] = radioFreq }
+                                android.util.Log.d("RadioPresets", "Preset long-clicked: index=$pIdx, currentFreq=${hwFreqFloat ?: radioFreq}, hasHardware=$hasHardware, displayBand=$displayBand")
+                                if (hasHardware) {
+                                    val currentFreq = hwFreqFloat ?: radioFreq
+                                    if (displayBand.startsWith("FM"))
+                                        fmPresets = fmPresets.toMutableList().also { it[pIdx] = currentFreq }
+                                    else
+                                        amPresets = amPresets.toMutableList().also { it[pIdx] = currentFreq }
+                                } else {
+                                    if (band.startsWith("FM"))
+                                        fmPresets = fmPresets.toMutableList().also { it[pIdx] = radioFreq }
+                                    else
+                                        amPresets = amPresets.toMutableList().also { it[pIdx] = radioFreq }
+                                }
                             }
                         ),
                     contentAlignment = Alignment.Center
@@ -491,19 +558,10 @@ fun PioneerDEHP7600MPDeck(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
-                        Text(
-                            "${pIdx + 1}",
-                            color = if (isTuned) accent else dimColor,
-                            fontSize = 6.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            displayFreq,
-                            color = if (isTuned) accent.copy(alpha = 0.8f) else dimColor.copy(alpha = 0.6f),
-                            fontSize = 5.5.sp,
-                            fontFamily = FontFamily.Monospace
-                        )
+                        Text("${pIdx + 1}", color = presetNumColor, fontSize = 7.sp,
+                            fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        Text(displayFreq, color = presetFreqColor, fontSize = 6.sp,
+                            fontFamily = FontFamily.Monospace)
                     }
                 }
             }
@@ -524,21 +582,21 @@ private fun RadioFlatButton(
 ) {
     Box(
         modifier = modifier
-            .height(22.dp)
-            .border(1.dp, if (active) accent else borderColor, RoundedCornerShape(2.dp))
-            .clip(RoundedCornerShape(2.dp))
-            .background(if (active) accent.copy(alpha = 0.12f) else Color.Transparent)
+            .height(28.dp)
+            .border(1.dp, if (active) accent else borderColor, RoundedCornerShape(3.dp))
+            .clip(RoundedCornerShape(3.dp))
+            .background(if (active) accent.copy(alpha = 0.15f) else Color.Transparent)
             .clickable(enabled = enabled) { onClick() },
         contentAlignment = Alignment.Center
     ) {
         Text(
             label,
             color = when {
-                !enabled -> dimColor.copy(alpha = 0.3f)
+                !enabled -> dimColor.copy(alpha = 0.35f)
                 active   -> accent
                 else     -> dimColor
             },
-            fontSize = 7.sp,
+            fontSize = 8.sp,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
             letterSpacing = 0.8.sp
@@ -567,10 +625,10 @@ private fun StandardMinimalPlayer(
     val context = LocalContext.current
     
     // UI Theme colors
-    val idleIconColor = if (isDayMode) Color(0xFF888888) else Color.White.copy(alpha = 0.30f)
-    val idleTextColor = if (isDayMode) Color(0xFF888888) else Color.White.copy(alpha = 0.30f)
-    val contentTextColor = if (isDayMode) Color(0xFF111111) else Color.White
-    val subTextColor = if (isDayMode) Color(0xFF888888) else Color.White.copy(alpha = 0.30f)
+    val idleIconColor = if (isDayMode) Color(0xFF555555) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.30f)
+    val idleTextColor = if (isDayMode) Color(0xFF555555) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.30f)
+    val contentTextColor = if (isDayMode) Color(0xFF111111) else MaterialTheme.colorScheme.onBackground
+    val subTextColor = if (isDayMode) Color(0xFF666666) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.30f)
 
     Box(modifier = modifier) {
         if (!hasContent) {
@@ -604,7 +662,7 @@ private fun StandardMinimalPlayer(
                         if (hasCarPlay && hasAutoApp) {
                             androidx.compose.material3.VerticalDivider(
                                 modifier = Modifier.fillMaxHeight().padding(vertical = 16.dp),
-                                color = if (isDayMode) Color(0xFFE5E7EB) else Color(0xFF1E1E1E)
+                                color = if (isDayMode) Color(0xFFBBBBBB) else Color(0xFF1E1E1E)
                             )
                         }
                         if (hasAutoApp) {
@@ -649,13 +707,30 @@ private fun StandardMinimalPlayer(
             }
 
             // Draw Album Art as background with smooth blur overlay if present
-            if (nonNullState.albumArt != null) {
+            val hasAlbumArt = nonNullState.albumArt != null
+            val useDarkTheme = hasAlbumArt || !isDayMode
+
+            val currentTextColor = if (hasAlbumArt) Color.White else if (isDayMode) Color(0xFF111111) else MaterialTheme.colorScheme.onBackground
+            val currentSubTextColor = if (hasAlbumArt) Color.White.copy(alpha = 0.6f) else if (isDayMode) Color(0xFF666666) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+            val currentProgressColor = if (useDarkTheme) accent else if (isDayMode) Color(0xFF111111) else accent
+            val currentProgressTrack = currentTextColor.copy(alpha = 0.15f)
+            val currentIconColor = currentTextColor.copy(alpha = 0.75f)
+            val currentPlayBgColor = if (useDarkTheme) accent.copy(alpha = 0.9f) else if (isDayMode) Color(0xFF111111) else accent.copy(alpha = 0.9f)
+            val currentPlayIconColor = if (useDarkTheme) Color.Black else Color.White
+
+            if (hasAlbumArt) {
                 Image(
-                    bitmap = nonNullState.albumArt.asImageBitmap(),
+                    bitmap = nonNullState.albumArt!!.asImageBitmap(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
-                    alpha = 0.12f // delicate ambient background highlight
+                    alpha = 1.0f // Draw at full opacity covering the background
+                )
+                // 25% dimming layer overlay
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.25f))
                 )
             }
 
@@ -675,7 +750,7 @@ private fun StandardMinimalPlayer(
                     Text(
                         text = nonNullState.title,
                         style = MaterialTheme.typography.titleMedium,
-                        color = contentTextColor,
+                        color = currentTextColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         fontSize = 14.sp
@@ -683,7 +758,7 @@ private fun StandardMinimalPlayer(
                     Text(
                         text = nonNullState.artist.ifEmpty { "Unknown" },
                         style = MaterialTheme.typography.bodySmall,
-                        color = subTextColor,
+                        color = currentSubTextColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         fontSize = 11.sp
@@ -696,15 +771,15 @@ private fun StandardMinimalPlayer(
                         LinearProgressIndicator(
                             progress = { (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) },
                             modifier = Modifier.fillMaxWidth().height(2.dp),
-                            color = accent,
-                            trackColor = contentTextColor.copy(alpha = 0.15f)
+                            color = currentProgressColor,
+                            trackColor = currentProgressTrack
                         )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(formatMs(positionMs), style = MaterialTheme.typography.labelSmall, color = subTextColor.copy(alpha = 0.75f), fontSize = 9.sp)
-                            Text(formatMs(durationMs), style = MaterialTheme.typography.labelSmall, color = subTextColor.copy(alpha = 0.75f), fontSize = 9.sp)
+                            Text(formatMs(positionMs), style = MaterialTheme.typography.labelSmall, color = currentSubTextColor.copy(alpha = 0.75f), fontSize = 9.sp)
+                            Text(formatMs(durationMs), style = MaterialTheme.typography.labelSmall, color = currentSubTextColor.copy(alpha = 0.75f), fontSize = 9.sp)
                         }
                     }
 
@@ -714,26 +789,26 @@ private fun StandardMinimalPlayer(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         IconButton(onClick = { if (!isEditing) onPrev() }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.SkipPrevious, "Prev", tint = contentTextColor.copy(alpha = 0.75f), modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.SkipPrevious, "Prev", tint = currentIconColor, modifier = Modifier.size(20.dp))
                         }
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
                                 .size(42.dp)
                                 .clip(CircleShape)
-                                .background(accent.copy(alpha = 0.9f))
+                                .background(currentPlayBgColor)
                         ) {
                             IconButton(onClick = { if (!isEditing) onPlayPause() }, modifier = Modifier.size(42.dp)) {
                                 Icon(
                                     imageVector = if (nonNullState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                     contentDescription = if (nonNullState.isPlaying) "Pause" else "Play",
-                                    tint = if (isDayMode) Color.White else Color.Black,
+                                    tint = currentPlayIconColor,
                                     modifier = Modifier.size(22.dp)
                                 )
                             }
                         }
                         IconButton(onClick = { if (!isEditing) onNext() }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.SkipNext, "Next", tint = contentTextColor.copy(alpha = 0.75f), modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.SkipNext, "Next", tint = currentIconColor, modifier = Modifier.size(20.dp))
                         }
                     }
                 }

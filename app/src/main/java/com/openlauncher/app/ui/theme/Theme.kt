@@ -15,10 +15,12 @@ val LocalDayMode = staticCompositionLocalOf { false }
 fun OpenLauncherTheme(
     accent: Color     = AccentWhite,
     background: Color = Black,
+    textColor: Color  = Color.White,
     fontBold: Boolean = false,
     textScale: Float  = 1.0f,
     appFont: AppFont  = AppFont.JETBRAINS_MONO,
     isDayMode: Boolean = false,
+    useCustomBg: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (isDayMode) lightColorScheme(
@@ -27,7 +29,7 @@ fun OpenLauncherTheme(
         secondary        = accent.copy(alpha = 0.7f),
         onSecondary      = Color.White,
         tertiary         = accent.copy(alpha = 0.5f),
-        background       = Color(0xFFEEEEEE),
+        background       = if (useCustomBg) background else Color(0xFFEEEEEE),
         surface          = Color(0xFFFFFFFF),
         onBackground     = Color(0xFF111111),
         onSurface        = Color(0xFF111111),
@@ -42,8 +44,8 @@ fun OpenLauncherTheme(
         tertiary         = accent.copy(alpha = 0.5f),
         background       = background,
         surface          = CardSurface,
-        onBackground     = White,
-        onSurface        = White,
+        onBackground     = textColor,
+        onSurface        = textColor,
         surfaceVariant   = DimSurface,
         onSurfaceVariant = TextMuted,
         outline          = DividerGray

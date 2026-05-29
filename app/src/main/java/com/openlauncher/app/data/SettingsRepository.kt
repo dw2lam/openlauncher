@@ -21,6 +21,7 @@ class SettingsRepository(private val context: Context) {
         val VEHICLE_NAME       = stringPreferencesKey("vehicle_name")
         val ACCENT_COLOR       = intPreferencesKey("accent_color")
         val BG_COLOR           = intPreferencesKey("bg_color")
+        val FONT_COLOR         = intPreferencesKey("font_color")
         val WALLPAPER_URI      = stringPreferencesKey("wallpaper_uri")
         val FONT_BOLD          = booleanPreferencesKey("font_bold")
         val TEXT_SCALE         = floatPreferencesKey("text_scale")
@@ -53,6 +54,10 @@ class SettingsRepository(private val context: Context) {
         val COMPASS_OFFSET        = floatPreferencesKey("compass_offset")
         val SHOW_SOUNDBOARD       = booleanPreferencesKey("show_soundboard")
         val SOUNDBOARD_PADS_JSON  = stringPreferencesKey("soundboard_pads_json")
+        val VITALS_AS_BARS        = booleanPreferencesKey("vitals_as_bars")
+        val SPEEDOMETER_DIGITAL_ONLY = booleanPreferencesKey("speedometer_digital_only")
+        val GRADIENT_DIRECTION    = stringPreferencesKey("gradient_direction")
+        val USE_CUSTOM_BG_COLOR   = booleanPreferencesKey("use_custom_bg_color")
     }
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data
@@ -81,6 +86,7 @@ class SettingsRepository(private val context: Context) {
                 vehicleName    = prefs[Keys.VEHICLE_NAME]     ?: defaults.vehicleName,
                 accentColor    = prefs[Keys.ACCENT_COLOR]     ?: defaults.accentColor,
                 backgroundColor = prefs[Keys.BG_COLOR]        ?: defaults.backgroundColor,
+                fontColor      = prefs[Keys.FONT_COLOR]       ?: defaults.fontColor,
                 wallpaperUri   = prefs[Keys.WALLPAPER_URI]    ?: defaults.wallpaperUri,
                 fontBold       = prefs[Keys.FONT_BOLD]        ?: defaults.fontBold,
                 textScale      = prefs[Keys.TEXT_SCALE]       ?: defaults.textScale,
@@ -114,7 +120,11 @@ class SettingsRepository(private val context: Context) {
                 showSoundboard   = prefs[Keys.SHOW_SOUNDBOARD]   ?: defaults.showSoundboard,
                 soundboardPads   = prefs[Keys.SOUNDBOARD_PADS_JSON]?.let {
                     gson.fromJson<List<SoundPadConfig>>(it, object : com.google.gson.reflect.TypeToken<List<SoundPadConfig>>() {}.type)
-                } ?: defaults.soundboardPads
+                } ?: defaults.soundboardPads,
+                vitalsAsBars     = prefs[Keys.VITALS_AS_BARS] ?: defaults.vitalsAsBars,
+                speedometerDigitalOnly = prefs[Keys.SPEEDOMETER_DIGITAL_ONLY] ?: defaults.speedometerDigitalOnly,
+                gradientDirection = prefs[Keys.GRADIENT_DIRECTION]?.let { runCatching { GradientDirection.valueOf(it) }.getOrNull() } ?: defaults.gradientDirection,
+                useCustomBackgroundColor = prefs[Keys.USE_CUSTOM_BG_COLOR] ?: defaults.useCustomBackgroundColor
             )
         }
 
@@ -123,6 +133,7 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.VEHICLE_NAME]       = s.vehicleName
             prefs[Keys.ACCENT_COLOR]       = s.accentColor
             prefs[Keys.BG_COLOR]           = s.backgroundColor
+            prefs[Keys.FONT_COLOR]         = s.fontColor
             prefs[Keys.WALLPAPER_URI]      = s.wallpaperUri
             prefs[Keys.FONT_BOLD]          = s.fontBold
             prefs[Keys.TEXT_SCALE]         = s.textScale
@@ -154,6 +165,10 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.COMPASS_OFFSET]     = s.compassOffset
             prefs[Keys.SHOW_SOUNDBOARD]    = s.showSoundboard
             prefs[Keys.SOUNDBOARD_PADS_JSON] = gson.toJson(s.soundboardPads)
+            prefs[Keys.VITALS_AS_BARS]     = s.vitalsAsBars
+            prefs[Keys.SPEEDOMETER_DIGITAL_ONLY] = s.speedometerDigitalOnly
+            prefs[Keys.GRADIENT_DIRECTION] = s.gradientDirection.name
+            prefs[Keys.USE_CUSTOM_BG_COLOR] = s.useCustomBackgroundColor
         }
     }
 

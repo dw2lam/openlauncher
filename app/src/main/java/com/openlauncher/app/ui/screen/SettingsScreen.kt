@@ -30,6 +30,7 @@ import com.openlauncher.app.data.AppSettings
 import com.openlauncher.app.data.DayNightMode
 import com.openlauncher.app.data.SidebarPosition
 import com.openlauncher.app.data.ShortcutConfig
+import com.openlauncher.app.data.GradientDirection
 import com.openlauncher.app.data.UnitSystem
 import com.openlauncher.app.ui.theme.LocalDayMode
 import com.openlauncher.app.util.SunriseSunset
@@ -53,6 +54,7 @@ fun SettingsScreen(
     var showAccentPicker      by remember { mutableStateOf(false) }
     var showBgPicker          by remember { mutableStateOf(false) }
     var showGradientEndPicker by remember { mutableStateOf(false) }
+    var showFontColorPicker   by remember { mutableStateOf(false) }
 
     val wallpaperPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
@@ -69,7 +71,7 @@ fun SettingsScreen(
     }
 
     val isDayMode = LocalDayMode.current
-    val screenBg  = if (isDayMode) Color(0xFFEEEEEE) else Color(0xFF000000)
+    val screenBg  = MaterialTheme.colorScheme.background
 
     Box(
         modifier = modifier
@@ -398,7 +400,41 @@ fun SettingsScreen(
                                 .clickable { showGradientEndPicker = true }
                         )
                     }
+                    if (settings.useCustomBackgroundColor) {
+                        TextButton(
+                            onClick = {
+                                onUpdate {
+                                    copy(
+                                        useCustomBackgroundColor = false,
+                                        backgroundColor = Color.Black.toArgb(),
+                                        useGradient = false
+                                    )
+                                }
+                            },
+                            contentPadding = PaddingValues(horizontal = 6.dp),
+                            modifier = Modifier.height(28.dp)
+                        ) {
+                            Text("DEFAULT", color = accent, fontSize = 9.sp, letterSpacing = 1.sp)
+                        }
+                    }
                 }
+            }
+
+            SettingsDivider()
+
+            // Font Color row
+            SettingsRow(
+                label    = "Font Color",
+                sublabel = "Custom text color in dark mode",
+                icon     = Icons.Default.FormatSize
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(settings.fontColor))
+                        .clickable { showFontColorPicker = true }
+                )
             }
 
             SettingsDivider()
@@ -407,6 +443,45 @@ fun SettingsScreen(
                 Switch(checked = settings.useGradient,
                     onCheckedChange = { onUpdate { copy(useGradient = it) } },
                     colors = switchColors(accent))
+            }
+
+            if (settings.useGradient) {
+                SettingsDivider()
+                SettingsRow(
+                    label    = "Gradient Direction",
+                    sublabel = when (settings.gradientDirection) {
+                        GradientDirection.TOP_TO_BOTTOM -> "Top to Bottom"
+                        GradientDirection.LEFT_TO_RIGHT -> "Left to Right"
+                        GradientDirection.DIAGONAL      -> "Diagonal (Linear)"
+                        GradientDirection.RADIAL        -> "Radial (Circular)"
+                    },
+                    icon     = Icons.Default.TrendingFlat
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        GradientDirection.entries.forEach { dir ->
+                            FilterChip(
+                                selected = settings.gradientDirection == dir,
+                                onClick  = { onUpdate { copy(gradientDirection = dir) } },
+                                label    = {
+                                    Text(
+                                        text      = when (dir) {
+                                            GradientDirection.TOP_TO_BOTTOM -> "Vertical"
+                                            GradientDirection.LEFT_TO_RIGHT -> "Horizontal"
+                                            GradientDirection.DIAGONAL      -> "Diagonal"
+                                            GradientDirection.RADIAL        -> "Radial"
+                                        },
+                                        fontSize  = 9.sp,
+                                        letterSpacing = 0.5.sp
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = accent,
+                                    selectedLabelColor     = Color.Black
+                                )
+                            )
+                        }
+                    }
+                }
             }
 
             SettingsDivider()
@@ -638,7 +713,7 @@ fun SettingsScreen(
         Spacer(Modifier.height(32.dp))
 
         Text(
-            text          = "Made by David Lam  ·  2026",
+            text          = "v0.0.4  ·  Made by David Lam  ·  2026",
             color         = if (isDayMode) Color(0xFFAAAAAA) else Color(0xFF2A2A2A),
             fontSize      = 10.sp,
             letterSpacing = 1.sp,
@@ -673,7 +748,14 @@ fun SettingsScreen(
         ColorPickerDialog(
             title           = "Background Color",
             initialColor    = Color(settings.backgroundColor),
-            onColorSelected = { c -> onUpdate { copy(backgroundColor = c.toArgb()) } },
+            onColorSelected = { c -> 
+                onUpdate { 
+                    copy(
+                        backgroundColor = c.toArgb(),
+                        useCustomBackgroundColor = true
+                    ) 
+                } 
+            },
             onDismiss       = { showBgPicker = false }
         )
     }
@@ -682,8 +764,24 @@ fun SettingsScreen(
         ColorPickerDialog(
             title           = "Gradient End Color",
             initialColor    = Color(settings.gradientEndColor),
-            onColorSelected = { c -> onUpdate { copy(gradientEndColor = c.toArgb()) } },
+            onColorSelected = { c -> 
+                onUpdate { 
+                    copy(
+                        gradientEndColor = c.toArgb(),
+                        useCustomBackgroundColor = true
+                    ) 
+                } 
+            },
             onDismiss       = { showGradientEndPicker = false }
+        )
+    }
+
+    if (showFontColorPicker) {
+        ColorPickerDialog(
+            title           = "Font Color",
+            initialColor    = Color(settings.fontColor),
+            onColorSelected = { c -> onUpdate { copy(fontColor = c.toArgb()) } },
+            onDismiss       = { showFontColorPicker = false }
         )
     }
 }

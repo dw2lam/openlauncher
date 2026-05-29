@@ -1,9 +1,6 @@
 package com.openlauncher.app.ui.widget
 
 import android.content.Intent
-import android.media.AudioFormat
-import android.media.AudioManager
-import android.media.AudioTrack
 import android.media.MediaPlayer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -35,7 +32,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.openlauncher.app.data.SoundPadConfig
-import kotlin.math.sin
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -48,22 +44,23 @@ fun SoundboardWidget(
     modifier: Modifier = Modifier
 ) {
     val context      = LocalContext.current
-    val contentColor = if (isDayMode) Color(0xFF111111) else Color.White
-    val dimColor     = if (isDayMode) Color(0xFF888888) else Color(0xFF555555)
-    val borderColor  = if (isDayMode) Color(0xFFE5E7EB) else Color(0xFF1D2024)
+    val contentColor = if (isDayMode) Color(0xFF111111) else MaterialTheme.colorScheme.onBackground
+    val dimColor     = if (isDayMode) Color(0xFF888888) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+    val borderColor  = if (isDayMode) Color(0xFFE5E7EB) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.15f)
 
     var activePadIndex by remember { mutableStateOf<Int?>(null) }
     var assigningIndex by remember { mutableStateOf<Int?>(null) }
 
     val safePads = remember(pads) {
         if (pads.size >= 6) pads.take(6)
-        else pads + List(6 - pads.size) { SoundPadConfig("PAD ${pads.size + it + 1}") }
+        else pads + List(6 - pads.size) { SoundPadConfig("+", synthType = "") }
     }
 
+    // Outer grid Column with top padding = 22.dp to leave room for card header label "SOUNDBOARD"
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .padding(start = 10.dp, end = 10.dp, top = 22.dp, bottom = 8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         repeat(2) { row ->
@@ -93,50 +90,34 @@ fun SoundboardWidget(
                             .then(
                                 if (!isEditing) Modifier.combinedClickable(
                                     onClick = {
-                                        activePadIndex = idx
-                                        playSoundPad(
-                                            context = context,
-                                            pad = pad,
-                                            onDone = { activePadIndex = null }
-                                        )
+                                        if (pad.label == "+" || (pad.audioUri.isEmpty() && pad.synthType.isEmpty())) {
+                                            assigningIndex = idx
+                                        } else {
+                                            activePadIndex = idx
+                                            playSoundPad(
+                                                context = context,
+                                                pad = pad,
+                                                onDone = { activePadIndex = null }
+                                            )
+                                        }
                                     },
                                     onLongClick = { assigningIndex = idx }
                                 ) else Modifier
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(3.dp)
-                        ) {
-                            Text(
-                                text = pad.label.uppercase(),
-                                color = if (isActive) accent else contentColor,
-                                fontSize = 8.sp,
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                textAlign = TextAlign.Center
-                            )
-                            if (hasCustomAudio) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(4.dp)
-                                        .clip(androidx.compose.foundation.shape.CircleShape)
-                                        .background(if (isActive) accent else dimColor.copy(alpha = 0.6f))
-                                )
-                            } else {
-                                Text(
-                                    text = pad.synthType,
-                                    color = dimColor.copy(alpha = if (isActive) 0.8f else 0.5f),
-                                    fontSize = 6.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    letterSpacing = 0.5.sp
-                                )
-                            }
-                        }
+                        val isPlus = pad.label == "+"
+                        Text(
+                            text = pad.label,
+                            color = if (isActive) accent else if (isPlus) dimColor else contentColor,
+                            fontSize = if (isPlus) 16.sp else 9.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center
+                        )
                     }
                 }
             }
@@ -166,11 +147,11 @@ private fun PadAssignDialog(
     onSave: (SoundPadConfig) -> Unit
 ) {
     val context    = LocalContext.current
-    val menuBg     = if (isDayMode) Color(0xFFF0F0F0) else Color(0xFF111111)
-    val menuBorder = if (isDayMode) Color(0xFFCCCCCC) else Color(0xFF1E1E1E)
-    val contentColor = if (isDayMode) Color(0xFF111111) else Color.White
-    val dimColor   = if (isDayMode) Color(0xFF888888) else Color(0xFF555555)
-    val fieldBorder = if (isDayMode) Color(0xFFCCCCCC) else Color(0xFF2E3238)
+    val menuBg     = if (isDayMode) Color(0xFFF0F0F0) else MaterialTheme.colorScheme.background
+    val menuBorder = if (isDayMode) Color(0xFFCCCCCC) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.15f)
+    val contentColor = if (isDayMode) Color(0xFF111111) else MaterialTheme.colorScheme.onBackground
+    val dimColor   = if (isDayMode) Color(0xFF888888) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+    val fieldBorder = if (isDayMode) Color(0xFFCCCCCC) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f)
 
     var labelText   by remember { mutableStateOf(pad.label) }
     var synthType   by remember { mutableStateOf(pad.synthType) }
@@ -186,23 +167,25 @@ private fun PadAssignDialog(
                 )
             }
             audioUri = uri.toString()
+            val rawName = uri.path?.substringAfterLast('/') ?: "custom_sound"
+            labelText = rawName.substringAfterLast(':').substringBeforeLast('.')
         }
     }
 
     Dialog(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
-                .clip(RoundedCornerShape(4.dp))
+                .clip(RoundedCornerShape(6.dp))
                 .background(menuBg)
-                .border(1.dp, menuBorder, RoundedCornerShape(4.dp))
-                .padding(16.dp)
-                .width(220.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .border(1.dp, menuBorder, RoundedCornerShape(6.dp))
+                .padding(18.dp)
+                .width(340.dp), // Fixed size: increased from 220dp to 340dp for landscape headunit displays
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Text(
-                "ASSIGN PAD",
+                "ASSIGN PAD SOUND",
                 color = contentColor,
-                fontSize = 9.sp,
+                fontSize = 10.sp,
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 2.sp
@@ -210,10 +193,10 @@ private fun PadAssignDialog(
 
             // Label field
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("LABEL", color = dimColor, fontSize = 7.sp, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
+                Text("PAD LABEL", color = dimColor, fontSize = 7.sp, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
                 BasicTextField(
                     value = labelText,
-                    onValueChange = { if (it.length <= 10) labelText = it },
+                    onValueChange = { if (it.length <= 12) labelText = it },
                     singleLine = true,
                     textStyle = TextStyle(
                         color = contentColor,
@@ -228,26 +211,39 @@ private fun PadAssignDialog(
                 )
             }
 
-            // Synth sound type
+            // Preloaded Audio Selector (replaces old raw waveform synth generation)
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("SYNTH TYPE", color = dimColor, fontSize = 7.sp, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    listOf("BEEP", "KICK", "SNARE", "BASS", "HORN", "ALERT", "FART").forEach { type ->
-                        val active = synthType == type
+                Text("PRELOADED AUDIO", color = dimColor, fontSize = 7.sp, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    val preloadedSounds = listOf(
+                        "mario_jump" to "mario_jump",
+                        "mario_coin" to "mario_coin",
+                        "boom" to "boom",
+                        "loud_fart" to "loud_fart"
+                    )
+                    preloadedSounds.forEach { (type, chipLabel) ->
+                        val active = synthType == type && audioUri.isEmpty()
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .height(22.dp)
-                                .border(1.dp, if (active) accent else fieldBorder, RoundedCornerShape(2.dp))
-                                .clip(RoundedCornerShape(2.dp))
+                                .height(28.dp)
+                                .border(1.dp, if (active) accent else fieldBorder, RoundedCornerShape(3.dp))
+                                .clip(RoundedCornerShape(3.dp))
                                 .background(if (active) accent.copy(alpha = 0.12f) else Color.Transparent)
-                                .clickable { synthType = type; audioUri = "" },
+                                .clickable { 
+                                    synthType = type
+                                    audioUri = ""
+                                    labelText = type
+                                },
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                type,
+                                chipLabel,
                                 color = if (active) accent else dimColor,
-                                fontSize = 5.5.sp,
+                                fontSize = 8.sp,
                                 fontFamily = FontFamily.Monospace,
                                 fontWeight = FontWeight.Bold
                             )
@@ -256,9 +252,9 @@ private fun PadAssignDialog(
                 }
             }
 
-            // Custom audio file
+            // Custom audio file picker
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("AUDIO FILE", color = dimColor, fontSize = 7.sp, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
+                Text("CUSTOM AUDIO FILE", color = dimColor, fontSize = 7.sp, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -274,7 +270,7 @@ private fun PadAssignDialog(
                         Icon(Icons.Default.AudioFile, null, tint = accent, modifier = Modifier.size(12.dp))
                         Spacer(Modifier.width(4.dp))
                         Text(
-                            if (audioUri.isNotEmpty()) "ASSIGNED" else "PICK FILE",
+                            if (audioUri.isNotEmpty()) "CUSTOM FILE ASSIGNED" else "PICK AUDIO FILE",
                             color = accent,
                             fontSize = 7.sp,
                             fontFamily = FontFamily.Monospace,
@@ -292,13 +288,32 @@ private fun PadAssignDialog(
                 }
                 if (audioUri.isNotEmpty()) {
                     Text(
-                        audioUri.substringAfterLast('/').take(24),
+                        audioUri.substringAfterLast('/').take(36),
                         color = dimColor.copy(alpha = 0.6f),
-                        fontSize = 6.sp,
+                        fontSize = 6.5.sp,
                         fontFamily = FontFamily.Monospace,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                }
+            }
+
+            if (pad.label != "+" || pad.audioUri.isNotEmpty() || pad.synthType.isNotEmpty()) {
+                OutlinedButton(
+                    onClick = {
+                        onSave(SoundPadConfig(
+                            label     = "+",
+                            audioUri  = "",
+                            synthType = ""
+                        ))
+                    },
+                    modifier = Modifier.fillMaxWidth().height(32.dp),
+                    shape = RoundedCornerShape(2.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF884444)),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF884444)),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text("CLEAR SOUND", color = Color(0xFF884444), fontSize = 7.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -309,13 +324,13 @@ private fun PadAssignDialog(
             ) {
                 OutlinedButton(
                     onClick = onDismiss,
-                    modifier = Modifier.weight(1f).height(30.dp),
+                    modifier = Modifier.weight(1f).height(32.dp),
                     shape = RoundedCornerShape(2.dp),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = dimColor),
                     border = androidx.compose.foundation.BorderStroke(1.dp, fieldBorder),
                     contentPadding = PaddingValues(0.dp)
                 ) {
-                    Text("CANCEL", color = dimColor, fontSize = 7.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                    Text("CANCEL", color = dimColor, fontSize = 7.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
                 }
                 Button(
                     onClick = {
@@ -325,12 +340,12 @@ private fun PadAssignDialog(
                             synthType = synthType
                         ))
                     },
-                    modifier = Modifier.weight(1f).height(30.dp),
+                    modifier = Modifier.weight(1f).height(32.dp),
                     shape = RoundedCornerShape(2.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = accent),
                     contentPadding = PaddingValues(0.dp)
                 ) {
-                    Text("SAVE", color = if (isDayMode) Color.White else Color.Black, fontSize = 7.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                    Text("SAVE SOUND", color = if (isDayMode) Color.White else Color.Black, fontSize = 7.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -338,10 +353,11 @@ private fun PadAssignDialog(
 }
 
 private fun playSoundPad(context: android.content.Context, pad: SoundPadConfig, onDone: () -> Unit) {
-    if (pad.audioUri.isNotEmpty()) {
-        Thread {
-            val player = MediaPlayer()
-            try {
+    val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    mainHandler.post {
+        try {
+            if (pad.audioUri.isNotEmpty()) {
+                val player = MediaPlayer()
                 player.setDataSource(context, android.net.Uri.parse(pad.audioUri))
                 player.prepare()
                 player.setOnCompletionListener { mp ->
@@ -349,100 +365,36 @@ private fun playSoundPad(context: android.content.Context, pad: SoundPadConfig, 
                     onDone()
                 }
                 player.start()
-            } catch (_: Exception) {
-                player.release()
-                playSynthPad(pad.synthType, onDone)
-            }
-        }.start()
-    } else {
-        playSynthPad(pad.synthType, onDone)
-    }
-}
-
-private fun playSynthPad(type: String, onDone: () -> Unit) {
-    Thread {
-        val sampleRate = 22050
-        val durationMs = when (type) {
-            "KICK"  -> 220
-            "SNARE" -> 160
-            "BASS"  -> 450
-            "HORN"  -> 600
-            "ALERT" -> 350
-            "FART"  -> 700
-            else    -> 280
-        }
-        val sampleCount = (sampleRate * (durationMs / 1000f)).toInt()
-        if (sampleCount <= 0) { onDone(); return@Thread }
-        val buffer = ShortArray(sampleCount)
-        val rng = java.util.Random()
-
-        for (i in 0 until sampleCount) {
-            val t = i.toFloat() / sampleRate
-            val env = 1f - (i.toFloat() / sampleCount)
-            buffer[i] = when (type) {
-                "KICK" -> {
-                    val freq = 140.0 - 100.0 * (i.toDouble() / sampleCount)
-                    (sin(2.0 * Math.PI * freq * t) * 28000.0 * env).toInt()
-                }
-                "SNARE" -> {
-                    val noise = rng.nextGaussian() * 12000.0
-                    val pop   = sin(2.0 * Math.PI * 180.0 * t) * 5000.0
-                    ((noise + pop) * env).toInt()
-                }
-                "BASS" -> {
-                    val freq = 65.0
-                    val period = (sampleRate / freq).toInt()
-                    val wave = if (period > 0 && (i % period) < (period / 2)) 1.0 else -1.0
-                    (wave * 14000.0 * env).toInt()
-                }
-                "HORN" -> {
-                    val h1 = sin(2.0 * Math.PI * 440.0 * t) * 10000.0
-                    val h2 = sin(2.0 * Math.PI * 550.0 * t) * 6000.0
-                    val h3 = sin(2.0 * Math.PI * 660.0 * t) * 3000.0
-                    ((h1 + h2 + h3) * env).toInt()
-                }
-                "ALERT" -> {
-                    val freq = if ((i / (sampleRate / 8)) % 2 == 0) 880.0 else 1100.0
-                    (sin(2.0 * Math.PI * freq * t) * 20000.0 * env).toInt()
-                }
-                "FART" -> {
-                    // Low rumble with flapping modulation and turbulent noise
-                    val progress = i.toDouble() / sampleCount
-                    val baseFreq = 55.0 + sin(progress * Math.PI * 3.0) * 25.0
-                    val flutter  = sin(progress * Math.PI * 18.0) * 0.45 + 0.55
-                    val period   = (sampleRate / baseFreq).toInt().coerceAtLeast(1)
-                    val square   = if ((i % period) < (period / 2)) 1.0 else -1.0
-                    val noise    = rng.nextGaussian() * 4000.0
-                    val fartEnv  = when {
-                        progress < 0.08 -> progress / 0.08
-                        progress > 0.75 -> (1.0 - progress) / 0.25
-                        else -> 1.0
+            } else {
+                var resName = pad.synthType.lowercase().trim()
+                var resId = context.resources.getIdentifier(resName, "raw", context.packageName)
+                if (resId == 0) {
+                    // Fallback mapping for legacy synth types saved in user settings
+                    resName = when (resName) {
+                        "horn", "beep", "alert" -> "mario_jump"
+                        "kick", "snare", "bass" -> "mario_coin"
+                        else -> "mario_jump"
                     }
-                    ((square * 18000.0 * flutter + noise) * fartEnv).toInt()
+                    resId = context.resources.getIdentifier(resName, "raw", context.packageName)
                 }
-                else -> {
-                    val v = sin(2.0 * Math.PI * 660.0 * t) + sin(2.0 * Math.PI * 792.0 * t) * 0.4
-                    (v * 12000.0 * env).toInt()
+                if (resId != 0) {
+                    val player = MediaPlayer.create(context, resId)
+                    if (player != null) {
+                        player.setOnCompletionListener { mp ->
+                            mp.release()
+                            onDone()
+                        }
+                        player.start()
+                    } else {
+                        onDone()
+                    }
+                } else {
+                    onDone()
                 }
-            }.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("Soundboard", "Error playing pad", e)
+            onDone()
         }
-
-        try {
-            val minBuf = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)
-            val track = AudioTrack(
-                AudioManager.STREAM_MUSIC,
-                sampleRate,
-                AudioFormat.CHANNEL_OUT_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                maxOf(minBuf, buffer.size * 2),
-                AudioTrack.MODE_STATIC
-            )
-            track.write(buffer, 0, buffer.size)
-            track.play()
-            Thread.sleep(durationMs.toLong() + 80L)
-            track.stop()
-            track.release()
-        } catch (_: Exception) {}
-        onDone()
-    }.start()
+    }
 }

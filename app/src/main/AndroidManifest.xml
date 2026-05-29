@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    android:sharedUserId="${sharedUserId}">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- Network for weather API -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+
+    <!-- Broadcast permission for MCU head unit event service -->
+    <uses-permission android:name="com.szchoiceway.permission.broadcast" />
 
     <!-- GPS for telemetry and weather location -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />

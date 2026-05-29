@@ -3,8 +3,12 @@ package com.openlauncher.app.viewmodel
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.database.ContentObserver
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings as AndroidSettings
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.openlauncher.app.data.AppSettings
@@ -192,7 +196,6 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
                 "TELEMETRY"   -> copy(showTelemetry = true)
                 "ALTIMETER"   -> copy(showAltimeter = true)
                 "SPEEDOMETER" -> copy(showSpeedometer = true)
-                "PIP_APP"     -> copy(showPip = true)
                 "VITALS"      -> copy(showVitals = true)
                 "TRIP_TRACKER" -> copy(showTripTracker = true)
                 "SOUNDBOARD"  -> copy(showSoundboard = true)
@@ -200,15 +203,9 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             }
             val idx       = layout.indexOfFirst { it.id == id }
             val newLayout = if (idx >= 0) layout.toMutableList().also {
-                it[idx] = if (id == "PIP_APP")
-                    it[idx].copy(enabled = true, gridX = cell_.first, gridY = 0, spanX = 1, spanY = 2)
-                else
-                    it[idx].copy(enabled = true, gridX = cell_.first, gridY = cell_.second)
+                it[idx] = it[idx].copy(enabled = true, gridX = cell_.first, gridY = cell_.second)
             } else {
-                if (id == "PIP_APP")
-                    layout + com.openlauncher.app.data.WidgetConfig(id, cell_.first, 0, spanX = 1, spanY = 2)
-                else
-                    layout + com.openlauncher.app.data.WidgetConfig(id, cell_.first, cell_.second)
+                layout + com.openlauncher.app.data.WidgetConfig(id, cell_.first, cell_.second)
             }
             withShow.copy(widgetLayout = newLayout)
         }
@@ -223,7 +220,6 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
                 "TELEMETRY"   -> copy(showTelemetry = false)
                 "ALTIMETER"   -> copy(showAltimeter = false)
                 "SPEEDOMETER" -> copy(showSpeedometer = false)
-                "PIP_APP"     -> copy(showPip = false)
                 "VITALS"      -> copy(showVitals = false)
                 "TRIP_TRACKER" -> copy(showTripTracker = false)
                 "SOUNDBOARD"  -> copy(showSoundboard = false)
@@ -388,6 +384,114 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         MediaListenerService.requestRefresh()
     }
 
+    // ── Hardware Radio (szchoiceway head unit) ────────────────────────────────
+    // Reads live state from Settings.Global SYS_MEDIA_INFO_JSON which the vendor
+    // radio app updates on every tune/seek. Parsed into band + frequency string.
+    data class HardwareRadioState(val band: String, val freq: String) {
+        val display get() = "$band  $freq"
+        val isAm    get() = band.equals("AM", ignoreCase = true)
+    }
+
+    private val _hardwareRadio = MutableStateFlow<HardwareRadioState?>(null)
+    val hardwareRadio: StateFlow<HardwareRadioState?> = _hardwareRadio
+
+    private fun parseRadioJson(): HardwareRadioState? {
+        return try {
+            val json = AndroidSettings.Global.getString(
+                getApplication<Application>().contentResolver, "SYS_MEDIA_INFO_JSON"
+            ) ?: return null
+            android.util.Log.d("RadioMcu", "parseRadioJson: json=$json")
+            val title = org.json.JSONObject(json).optString("mediaTitle", "") // e.g. "FM1 90.10"
+            if (title.isEmpty()) return null
+            val parts = title.trim().split("\\s+".toRegex())
+            if (parts.size < 2) return null
+            val state = HardwareRadioState(band = parts[0], freq = parts[1])
+            android.util.Log.d("RadioMcu", "parseRadioJson parsed: state=$state")
+            state
+        } catch (e: Exception) {
+            android.util.Log.e("RadioMcu", "parseRadioJson error", e)
+            null
+        }
+    }
+
+    private var radioObserver: ContentObserver? = null
+
+    private fun startHardwareRadioObserver() {
+        if (radioObserver != null) return
+        _hardwareRadio.value = parseRadioJson()
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                _hardwareRadio.value = parseRadioJson()
+            }
+        }
+        getApplication<Application>().contentResolver.registerContentObserver(
+            AndroidSettings.Global.getUriFor("SYS_MEDIA_INFO_JSON"),
+            false, observer
+        )
+        radioObserver = observer
+    }
+
+    // Send a radio keyCode to the MCU via the EventService broadcast channel.
+    // Permission com.szchoiceway.permission.broadcast (prot=normal) is required and declared.
+    // keyCodes: 15=seek_up, 14=seek_down, 30=fm_cycle, 31=am
+    private fun sendMcuByteArray(bytes: ByteArray) {
+        runCatching {
+            val intent = Intent("com.szchoiceway.eventcenter.EventUtils.ACTION_MCU_CMD_EVENT").apply {
+                putExtra("EventUtils.MCU_CMD_DATA", bytes)
+            }
+            getApplication<Application>().sendBroadcast(intent)
+        }
+    }
+
+    private fun sendMcuBytes(vararg bytes: Byte) = sendMcuByteArray(bytes)
+
+    // Tune to a specific frequency.
+    // Canbus frame: 0x5a 0xa5 0x0d [0x91 bandByte bank(2) zeros... freqAscii] checksum
+    // Checksum = low byte of sum of all preceding bytes.
+    // Wrapped with 0x0d 0x08 sub-command prefix for MCU_CMD_DATA.
+    fun radioTune(band: String, freqMhz: Float) {
+        android.util.Log.d("RadioMcu", "radioTune called: band=$band, freqMhz=$freqMhz")
+        val bandByte  = when (band) { "FM3" -> 0x03.toByte(); "AM" -> 0x04.toByte(); else -> 0x01.toByte() }
+        val bankStr   = if (band == "FM2") "02" else "01"
+        val freqStr   = if (band == "AM") String.format(java.util.Locale.US, "%.0f", freqMhz) else String.format(java.util.Locale.US, "%.1f", freqMhz)
+        val padding   = 9 - freqStr.length
+        val header    = byteArrayOf(0x5a.toByte(), 0xa5.toByte(), 0x0d.toByte())
+        val data      = byteArrayOf(0x91.toByte(), bandByte,
+                            bankStr[0].code.toByte(), bankStr[1].code.toByte()) +
+                        ByteArray(padding) +
+                        freqStr.map { it.code.toByte() }.toByteArray()
+        val frame     = header + data
+        val checksum  = (frame.sumOf { it.toInt() and 0xFF } and 0xFF).toByte()
+        val finalPayload = byteArrayOf(0x0d.toByte(), 0x08.toByte()) + frame + byteArrayOf(checksum)
+        android.util.Log.d("RadioMcu", "radioTune final payload: ${finalPayload.joinToString(", ") { "0x%02X".format(it) }}")
+        sendMcuByteArray(finalPayload)
+    }
+
+    fun radioSeekUp()   { sendMcuBytes(0x02, 0x0f) }
+    fun radioSeekDown() { sendMcuBytes(0x02, 0x0e) }
+    fun radioCycleFm()  { sendMcuBytes(0x02, 0x1e) }
+    fun radioSwitchAm() { sendMcuBytes(0x02, 0x1f) }
+    fun radioStart()    { sendMcuBytes(0x01, 0x01) }
+    fun radioStop()     { sendMcuBytes(0x01, 0x63) }
+
+    fun stopHardwareRadioApp() {
+        radioStop()
+    }
+
+    fun launchHardwareRadioApp() {
+        radioStart()
+        runCatching {
+            val intent = getApplication<Application>().packageManager
+                .getLaunchIntentForPackage("com.szchoiceway.radio")
+                ?: Intent(Intent.ACTION_MAIN).apply {
+                    `package` = "com.szchoiceway.radio"
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            getApplication<Application>().startActivity(intent)
+        }
+    }
+
     fun refreshConnectivity() {
         val cm = getApplication<Application>().getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val net = cm.activeNetwork
@@ -399,11 +503,14 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     override fun onCleared() {
         super.onCleared()
         locationMgr.stop()
+        radioObserver?.let { getApplication<Application>().contentResolver.unregisterContentObserver(it) }
+        radioObserver = null
     }
 
     init {
         loadInstalledApps()
         refreshConnectivity()
+        startHardwareRadioObserver()
         // Fetch weather on first location fix, then every 30 minutes
         viewModelScope.launch {
             var lastFetchMs = 0L
