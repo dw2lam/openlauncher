@@ -48,6 +48,7 @@ class SettingsRepository(private val context: Context) {
         val DAY_NIGHT_MODE        = stringPreferencesKey("day_night_mode")
         val SHOW_PIP              = booleanPreferencesKey("show_pip")
         val PIP_APP_PACKAGE       = stringPreferencesKey("pip_app_package")
+        val RADIO_PACKAGE         = stringPreferencesKey("radio_package")
         val ONBOARDING_COMPLETED  = booleanPreferencesKey("onboarding_completed")
         val SHOW_VITALS           = booleanPreferencesKey("show_vitals")
         val SHOW_TRIP_TRACKER     = booleanPreferencesKey("show_trip_tracker")
@@ -62,27 +63,33 @@ class SettingsRepository(private val context: Context) {
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data
         .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
-        .map { prefs ->
+        .map { prefs -> readSettings(prefs) }
+
+    private fun readSettings(prefs: Preferences): AppSettings {
             val defaults = AppSettings()
             val shortcutsJson = prefs[Keys.SHORTCUTS_JSON]
             val shortcuts = if (shortcutsJson != null) {
-                gson.fromJson<List<ShortcutConfig>>(
-                    shortcutsJson,
-                    object : TypeToken<List<ShortcutConfig>>() {}.type
-                ) ?: defaults.shortcuts
+                runCatching {
+                    gson.fromJson<List<ShortcutConfig>>(
+                        shortcutsJson,
+                        object : TypeToken<List<ShortcutConfig>>() {}.type
+                    )
+                }.getOrNull() ?: defaults.shortcuts
             } else defaults.shortcuts
 
             val widgetJson = prefs[Keys.WIDGET_LAYOUT_JSON]
             val widgets = if (widgetJson != null) {
-                val loaded = gson.fromJson<List<WidgetConfig>>(
-                    widgetJson,
-                    object : TypeToken<List<WidgetConfig>>() {}.type
-                ) ?: defaults.widgetLayout
+                val loaded = runCatching {
+                    gson.fromJson<List<WidgetConfig>>(
+                        widgetJson,
+                        object : TypeToken<List<WidgetConfig>>() {}.type
+                    )
+                }.getOrNull() ?: defaults.widgetLayout
                 // Migrate: old 2×2 layout has no widget with gridX≥2 — replace with new 3×2 default
                 if (loaded.none { it.gridX >= 2 }) defaults.widgetLayout else loaded
             } else defaults.widgetLayout
 
-            AppSettings(
+            return AppSettings(
                 vehicleName    = prefs[Keys.VEHICLE_NAME]     ?: defaults.vehicleName,
                 accentColor    = prefs[Keys.ACCENT_COLOR]     ?: defaults.accentColor,
                 backgroundColor = prefs[Keys.BG_COLOR]        ?: defaults.backgroundColor,
@@ -91,8 +98,8 @@ class SettingsRepository(private val context: Context) {
                 fontBold       = prefs[Keys.FONT_BOLD]        ?: defaults.fontBold,
                 textScale      = prefs[Keys.TEXT_SCALE]       ?: defaults.textScale,
                 uiScale        = prefs[Keys.UI_SCALE]         ?: defaults.uiScale,
-                clockStyle     = prefs[Keys.CLOCK_STYLE]?.let { ClockStyle.valueOf(it) } ?: defaults.clockStyle,
-                unitSystem     = prefs[Keys.UNIT_SYSTEM]?.let { UnitSystem.valueOf(it) } ?: defaults.unitSystem,
+                clockStyle     = prefs[Keys.CLOCK_STYLE]?.let { runCatching { ClockStyle.valueOf(it) }.getOrNull() } ?: defaults.clockStyle,
+                unitSystem     = prefs[Keys.UNIT_SYSTEM]?.let { runCatching { UnitSystem.valueOf(it) }.getOrNull() } ?: defaults.unitSystem,
                 appFont        = prefs[Keys.APP_FONT]?.let { runCatching { AppFont.valueOf(it) }.getOrNull() } ?: defaults.appFont,
                 showWeather    = prefs[Keys.SHOW_WEATHER]     ?: defaults.showWeather,
                 showClock      = prefs[Keys.SHOW_CLOCK]       ?: defaults.showClock,
@@ -113,23 +120,37 @@ class SettingsRepository(private val context: Context) {
                 dayNightMode     = prefs[Keys.DAY_NIGHT_MODE]?.let { runCatching { DayNightMode.valueOf(it) }.getOrNull() } ?: defaults.dayNightMode,
                 showPip          = prefs[Keys.SHOW_PIP]         ?: defaults.showPip,
                 pipAppPackage    = prefs[Keys.PIP_APP_PACKAGE]  ?: defaults.pipAppPackage,
+                radioPackage     = prefs[Keys.RADIO_PACKAGE]    ?: defaults.radioPackage,
                 onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: defaults.onboardingCompleted,
                 showVitals       = prefs[Keys.SHOW_VITALS]      ?: defaults.showVitals,
                 showTripTracker  = prefs[Keys.SHOW_TRIP_TRACKER] ?: defaults.showTripTracker,
                 compassOffset    = prefs[Keys.COMPASS_OFFSET]    ?: defaults.compassOffset,
                 showSoundboard   = prefs[Keys.SHOW_SOUNDBOARD]   ?: defaults.showSoundboard,
                 soundboardPads   = prefs[Keys.SOUNDBOARD_PADS_JSON]?.let {
-                    gson.fromJson<List<SoundPadConfig>>(it, object : com.google.gson.reflect.TypeToken<List<SoundPadConfig>>() {}.type)
+                    runCatching {
+                        gson.fromJson<List<SoundPadConfig>>(it, object : com.google.gson.reflect.TypeToken<List<SoundPadConfig>>() {}.type)
+                    }.getOrNull()
                 } ?: defaults.soundboardPads,
                 vitalsAsBars     = prefs[Keys.VITALS_AS_BARS] ?: defaults.vitalsAsBars,
                 speedometerDigitalOnly = prefs[Keys.SPEEDOMETER_DIGITAL_ONLY] ?: defaults.speedometerDigitalOnly,
                 gradientDirection = prefs[Keys.GRADIENT_DIRECTION]?.let { runCatching { GradientDirection.valueOf(it) }.getOrNull() } ?: defaults.gradientDirection,
                 useCustomBackgroundColor = prefs[Keys.USE_CUSTOM_BG_COLOR] ?: defaults.useCustomBackgroundColor
             )
-        }
+    }
 
     suspend fun saveSettings(s: AppSettings) {
-        context.dataStore.edit { prefs ->
+        context.dataStore.edit { prefs -> writeSettings(prefs, s) }
+    }
+
+    /**
+     * Atomic read-modify-write. DataStore serializes edit blocks, so concurrent
+     * updates can't overwrite each other (unlike transforming a stale snapshot).
+     */
+    suspend fun updateSettings(transform: (AppSettings) -> AppSettings) {
+        context.dataStore.edit { prefs -> writeSettings(prefs, transform(readSettings(prefs))) }
+    }
+
+    private fun writeSettings(prefs: MutablePreferences, s: AppSettings) {
             prefs[Keys.VEHICLE_NAME]       = s.vehicleName
             prefs[Keys.ACCENT_COLOR]       = s.accentColor
             prefs[Keys.BG_COLOR]           = s.backgroundColor
@@ -159,6 +180,7 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.DAY_NIGHT_MODE]     = s.dayNightMode.name
             prefs[Keys.SHOW_PIP]           = s.showPip
             prefs[Keys.PIP_APP_PACKAGE]    = s.pipAppPackage
+            prefs[Keys.RADIO_PACKAGE]      = s.radioPackage
             prefs[Keys.ONBOARDING_COMPLETED] = s.onboardingCompleted
             prefs[Keys.SHOW_VITALS]        = s.showVitals
             prefs[Keys.SHOW_TRIP_TRACKER]  = s.showTripTracker
@@ -169,7 +191,6 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.SPEEDOMETER_DIGITAL_ONLY] = s.speedometerDigitalOnly
             prefs[Keys.GRADIENT_DIRECTION] = s.gradientDirection.name
             prefs[Keys.USE_CUSTOM_BG_COLOR] = s.useCustomBackgroundColor
-        }
     }
 
     suspend fun resetToDefaults() {

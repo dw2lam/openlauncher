@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import com.openlauncher.app.data.AppFont
 
 val LocalDayMode = staticCompositionLocalOf { false }
@@ -23,11 +24,14 @@ fun OpenLauncherTheme(
     useCustomBg: Boolean = false,
     content: @Composable () -> Unit
 ) {
+    // Contrast-aware: the accent is user-chosen and can be any brightness,
+    // so a fixed onPrimary (white) goes invisible on light accents
+    val onAccent = if (accent.luminance() > 0.5f) Color.Black else Color.White
     val colorScheme = if (isDayMode) lightColorScheme(
         primary          = accent,
-        onPrimary        = Color.White,
+        onPrimary        = onAccent,
         secondary        = accent.copy(alpha = 0.7f),
-        onSecondary      = Color.White,
+        onSecondary      = onAccent,
         tertiary         = accent.copy(alpha = 0.5f),
         background       = if (useCustomBg) background else Color(0xFFEEEEEE),
         surface          = Color(0xFFFFFFFF),
@@ -38,9 +42,9 @@ fun OpenLauncherTheme(
         outline          = Color(0xFFCCCCCC)
     ) else darkColorScheme(
         primary          = accent,
-        onPrimary        = background,
+        onPrimary        = onAccent,
         secondary        = accent.copy(alpha = 0.7f),
-        onSecondary      = background,
+        onSecondary      = onAccent,
         tertiary         = accent.copy(alpha = 0.5f),
         background       = background,
         surface          = CardSurface,

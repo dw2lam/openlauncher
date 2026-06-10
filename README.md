@@ -51,7 +51,7 @@ The home screen is a fully drag-and-drop, resize-capable grid. Every widget pane
 A growing library of purpose-built car widgets designed to look like they belong on a dash — not a phone:
 
 * **Smart Music Player** — pulls track metadata, album art, and playback controls from any local or streaming source. Detects when CarPlay or Android Auto is in use and switches into shortcut mode automatically.
-* **AM/FM Radio** — instrument panel-style digital radio display with band switching (FM1/FM2/AM), frequency presets with memory, seek controls, and mute. Matches the monospace UI language of the rest of the launcher.
+* **AM/FM Radio** — instrument panel-style digital display that mirrors your head unit's **real tuner**. On szchoiceway-based units it talks to the MCU directly (seek, FM1/FM2/FM3/AM band switching, direct-tune frequency presets with memory). On every other unit it mirrors and controls your vendor radio app through its media session — assign the app once from the widget and get live frequency/station readout plus seek controls. No simulated stations or fake static.
 * **Speedometer** — standalone GPS-based digital speed readout. Independent from the trip tracker so it can live anywhere on the grid.
 * **Altimeter** — live elevation tracking pulled from the device GPS.
 * **Trip Meter** — taxi-style rolling odometer display with trip distance and elapsed time. Includes a hidden **0–100 km/h timer** (tap the meter label to reveal it) that auto-starts from standstill and locks in your time at 100.

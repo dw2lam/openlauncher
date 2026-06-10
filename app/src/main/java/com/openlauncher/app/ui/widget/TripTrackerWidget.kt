@@ -52,6 +52,12 @@ fun TripTrackerWidget(
     var idleTimeSeconds by rememberSaveable { mutableLongStateOf(0L) }
     var totalSpeedSum by rememberSaveable { mutableDoubleStateOf(0.0) }
     var movingSecondsCount by rememberSaveable { mutableLongStateOf(0L) }
+    var tripDistanceMeters by rememberSaveable { mutableDoubleStateOf(0.0) }
+
+    // The trip loop is keyed on isRunning only, so it must read location through
+    // rememberUpdatedState — a plain parameter capture would freeze the GPS fix
+    // at the moment tracking started and the trip would record nothing.
+    val currentLocation by rememberUpdatedState(location)
 
     var activeMode by rememberSaveable { mutableStateOf("TRIP") } // "TRIP" or "0-100"
     
@@ -74,7 +80,7 @@ fun TripTrackerWidget(
     LaunchedEffect(accelState, accelStartTime) {
         if (accelState == "RUNNING") {
             while (accelState == "RUNNING") {
-                val elapsed = System.currentTimeMillis() - accelStartTime
+                val elapsed = android.os.SystemClock.elapsedRealtime() - accelStartTime
                 accelTimeDisplay = "%.2fs".format(elapsed / 1000f)
                 delay(30)
             }
@@ -93,12 +99,12 @@ fun TripTrackerWidget(
             
             if (accelState == "READY") {
                 if (speedDisplayVal > 0.8f) { // start timer when vehicle moves above 0.8 km/h or mph
-                    accelStartTime = System.currentTimeMillis()
+                    accelStartTime = android.os.SystemClock.elapsedRealtime()
                     accelState = "RUNNING"
                 }
             } else if (accelState == "RUNNING") {
                 if (speedDisplayVal >= targetSpeed) {
-                    accelEndTime = System.currentTimeMillis()
+                    accelEndTime = android.os.SystemClock.elapsedRealtime()
                     accelState = "COMPLETE"
                     val finalTime = (accelEndTime - accelStartTime) / 1000f
                     bestAccelTime = if (bestAccelTime == null) finalTime else minOf(bestAccelTime!!, finalTime)
@@ -110,16 +116,16 @@ fun TripTrackerWidget(
     // Playful local test simulation loop (triggers when tapping speed layout while READY)
     LaunchedEffect(isSimulating) {
         if (isSimulating) {
-            accelStartTime = System.currentTimeMillis()
+            accelStartTime = android.os.SystemClock.elapsedRealtime()
             accelState = "RUNNING"
             val simTarget = if (isMetric) 100f else 60f
             simSpeed = 0f
             while (simSpeed < simTarget + 5f && isSimulating && accelState == "RUNNING") {
                 delay(30)
-                val elapsed = (System.currentTimeMillis() - accelStartTime) / 1000f
+                val elapsed = (android.os.SystemClock.elapsedRealtime() - accelStartTime) / 1000f
                 simSpeed = elapsed * elapsed * 2.8f + elapsed * 8f
                 if (simSpeed >= simTarget) {
-                    accelEndTime = System.currentTimeMillis()
+                    accelEndTime = android.os.SystemClock.elapsedRealtime()
                     accelState = "COMPLETE"
                     val finalTime = (accelEndTime - accelStartTime) / 1000f
                     bestAccelTime = if (bestAccelTime == null) finalTime else minOf(bestAccelTime!!, finalTime)
@@ -134,13 +140,19 @@ fun TripTrackerWidget(
 
     // Trip update loop
     LaunchedEffect(isRunning) {
+        var lastTickMs = android.os.SystemClock.elapsedRealtime()
         while (isRunning) {
             delay(1000)
-            val currentSpeed = location?.speedMps ?: 0f
+            val now = android.os.SystemClock.elapsedRealtime()
+            // Measure the real interval instead of assuming exactly 1 s per tick
+            val dtSeconds = ((now - lastTickMs) / 1000.0).coerceIn(0.0, 5.0)
+            lastTickMs = now
+            val currentSpeed = currentLocation?.speedMps ?: 0f
             if (currentSpeed > 0.5f) {
                 driveTimeSeconds++
                 totalSpeedSum += currentSpeed
                 movingSecondsCount++
+                tripDistanceMeters += currentSpeed * dtSeconds
             } else {
                 idleTimeSeconds++
             }
@@ -152,8 +164,7 @@ fun TripTrackerWidget(
     val avgSpeedDisplay = if (isMetric) averageSpeedMps * 3.6 else averageSpeedMps * 2.23694
     val speedUnit = if (isMetric) "KM/H" else "MPH"
 
-    val totalDistanceMeters = totalSpeedSum
-    val distanceDisplay = if (isMetric) totalDistanceMeters / 1000.0 else totalDistanceMeters / 1609.34
+    val distanceDisplay = if (isMetric) tripDistanceMeters / 1000.0 else tripDistanceMeters / 1609.34
     val distUnit = if (isMetric) "KM" else "MI"
 
     fun formatTime(seconds: Long): String {
@@ -536,6 +547,7 @@ fun TripTrackerWidget(
                         idleTimeSeconds = 0L
                         totalSpeedSum = 0.0
                         movingSecondsCount = 0L
+                        tripDistanceMeters = 0.0
                     }
                 },
                 isDayMode = isDayMode

@@ -162,9 +162,15 @@ fun Sidebar(
                 .height(56.dp)
                 .background(sidebarBg)
         ) {
-            // Shortcuts truly centred across the full width
+            // Shortcuts centred, inset past the edge-pinned nav buttons and
+            // scrollable — an unbounded row ran beneath the nav buttons and off
+            // both screen edges once enough slots were added
             Row(
-                modifier = Modifier.align(Alignment.Center).fillMaxHeight(),
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .fillMaxHeight()
+                    .padding(horizontal = 150.dp)
+                    .horizontalScroll(rememberScrollState()),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 shortcutsContent()
@@ -333,7 +339,9 @@ private fun ShortcutSlot(
                 )
             }
             resolvedIcon != null -> {
-                val bmp = resolvedIcon.toBitmap(44, 44)
+                // Cache per icon — every slot recomposes each drag frame, and an
+                // un-remembered toBitmap allocated a fresh bitmap per slot per frame
+                val bmp = remember(resolvedIcon) { resolvedIcon.toBitmap(44, 44) }
                 Icon(
                     painter            = BitmapPainter(bmp.asImageBitmap()),
                     contentDescription = shortcut.label,

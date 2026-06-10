@@ -228,7 +228,8 @@ class MainActivity : ComponentActivity() {
                                         onRadioSeekDown       = { vm.radioSeekDown() },
                                         onRadioCycleFm        = { vm.radioCycleFm() },
                                         onRadioSwitchAm       = { vm.radioSwitchAm() },
-                                        onRadioTune           = { band, freq -> vm.radioTune(band, freq) }
+                                        onRadioTune           = { band, freq -> vm.radioTune(band, freq) },
+                                        onAssignRadio         = { vm.startRadioPicker() }
                                     )
 
                                     NavDestination.APP_LIBRARY -> AppLibraryScreen(
@@ -240,6 +241,7 @@ class MainActivity : ComponentActivity() {
                                         carPlayPickerLabel  = when (appPickerTarget) {
                                             com.openlauncher.app.viewmodel.LauncherViewModel.AppPickerTarget.ANDROID_AUTO -> "CHOOSE ANDROID AUTO APP"
                                             com.openlauncher.app.viewmodel.LauncherViewModel.AppPickerTarget.PIP          -> "CHOOSE PIP APP"
+                                            com.openlauncher.app.viewmodel.LauncherViewModel.AppPickerTarget.RADIO        -> "CHOOSE RADIO APP"
                                             else -> "CHOOSE CARPLAY APP"
                                         },
                                         accent              = accent,

@@ -42,6 +42,9 @@ class MediaListenerService : NotificationListenerService() {
     override fun onDestroy() {
         instance = null
         clearController()
+        // Clear the static flow so the UI doesn't keep showing a dead session
+        // (and pinning its album-art bitmap) after the service is killed
+        _nowPlaying.value = null
         super.onDestroy()
     }
 
@@ -67,7 +70,10 @@ class MediaListenerService : NotificationListenerService() {
             return
         }
 
-        if (active !== activeController) {
+        // getActiveSessions returns NEW MediaController instances on every call —
+        // compare session tokens, not references, or we churn callbacks and
+        // recompose the UI on every notification system-wide.
+        if (active.sessionToken != activeController?.sessionToken) {
             clearController()
             activeController = active
             active.registerCallback(
@@ -76,25 +82,50 @@ class MediaListenerService : NotificationListenerService() {
             )
         }
 
-        updateFromController(active)
+        updateFromController(activeController)
     }
 
     private fun updateFromController(controller: MediaController?) {
         if (controller == null) { _nowPlaying.value = null; return }
         val meta = controller.metadata
+        val title = meta?.getString(MediaMetadata.METADATA_KEY_TITLE)
+            ?: meta?.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
+            ?: "Unknown"
+        val artist = meta?.getString(MediaMetadata.METADATA_KEY_ARTIST)
+            ?: meta?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
+            ?: meta?.getString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE)
+            ?: ""
+        // Prefer the largest bitmap the source provides; many apps put a
+        // downscaled image in ALBUM_ART and the full one in ART (or vice versa)
+        val art = try {
+            listOfNotNull(
+                meta?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART),
+                meta?.getBitmap(MediaMetadata.METADATA_KEY_ART),
+                meta?.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+            ).maxByOrNull { it.width * it.height }
+        } catch (_: Exception) { null }
+        val artUri = meta?.getString(MediaMetadata.METADATA_KEY_ART_URI)
+            ?: meta?.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
+            ?: meta?.getString(MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI)
+        val isPlaying = controller.playbackState?.state == PlaybackState.STATE_PLAYING
+
+        // Skip redundant emissions: metadata bitmaps parcel into fresh instances on
+        // every read, so a plain data-class compare would never match and every
+        // notification would force a recomposition + art redraw.
+        val prev = _nowPlaying.value
+        if (prev != null &&
+            prev.controller?.sessionToken == controller.sessionToken &&
+            prev.title == title && prev.artist == artist &&
+            prev.isPlaying == isPlaying && prev.artUri == artUri &&
+            (prev.albumArt != null) == (art != null)
+        ) return
+
         _nowPlaying.value = NowPlayingState(
-            title      = meta?.getString(MediaMetadata.METADATA_KEY_TITLE)
-                         ?: meta?.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
-                         ?: "Unknown",
-            artist     = meta?.getString(MediaMetadata.METADATA_KEY_ARTIST)
-                         ?: meta?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
-                         ?: meta?.getString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE)
-                         ?: "",
-            albumArt   = try {
-                meta?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
-                    ?: meta?.getBitmap(MediaMetadata.METADATA_KEY_ART)
-            } catch (_: Exception) { null },
-            isPlaying  = controller.playbackState?.state == PlaybackState.STATE_PLAYING,
+            title      = title,
+            artist     = artist,
+            albumArt   = art,
+            artUri     = artUri,
+            isPlaying  = isPlaying,
             controller = controller
         )
     }

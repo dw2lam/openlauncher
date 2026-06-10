@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import com.openlauncher.app.ui.theme.accentPresetLabels
@@ -25,18 +26,15 @@ fun ColorPickerDialog(
     onColorSelected: (Color) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var selectedColor by remember { mutableStateOf(initialColor) }
-    var hue   by remember { mutableStateOf(0f) }
-    var sat   by remember { mutableStateOf(1f) }
-    var value by remember { mutableStateOf(1f) }
-    var alpha by remember { mutableStateOf(1f) }
-
-    LaunchedEffect(Unit) {
-        val hsv = FloatArray(3)
-        android.graphics.Color.colorToHSV(initialColor.toArgb(), hsv)
-        hue = hsv[0]; sat = hsv[1]; value = hsv[2]
-        selectedColor = initialColor
+    // Seed HSV state from the initial color synchronously — initializing in a
+    // LaunchedEffect made the sliders flash wrong positions on the first frame
+    val initialHsv = remember(initialColor) {
+        FloatArray(3).also { android.graphics.Color.colorToHSV(initialColor.toArgb(), it) }
     }
+    var selectedColor by remember { mutableStateOf(initialColor) }
+    var hue   by remember { mutableStateOf(initialHsv[0]) }
+    var sat   by remember { mutableStateOf(initialHsv[1]) }
+    var value by remember { mutableStateOf(initialHsv[2]) }
 
     fun rebuildColor() {
         selectedColor = Color(android.graphics.Color.HSVToColor(floatArrayOf(hue, sat, value)))
@@ -51,7 +49,10 @@ fun ColorPickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor  = Color(0xFF1A1A1A),
+        // Always-dark surface: pin light content colors so day mode stays legible
+        containerColor    = Color(0xFF1A1A1A),
+        titleContentColor = Color.White,
+        textContentColor  = Color(0xFFCCCCCC),
         title = { Text(title) },
         text  = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -155,12 +156,20 @@ fun ColorPickerDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onColorSelected(selectedColor); onDismiss() }) {
-                Text("Apply", color = selectedColor)
+            // Filled with the chosen color + auto-contrast label, so Apply stays
+            // visible no matter how dark or light the selection is
+            Button(
+                onClick = { onColorSelected(selectedColor); onDismiss() },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = selectedColor,
+                    contentColor   = if (selectedColor.luminance() > 0.5f) Color.Black else Color.White
+                )
+            ) {
+                Text("Apply")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text("Cancel", color = Color(0xFFAAAAAA)) }
         }
     )
 }

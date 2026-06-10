@@ -6,9 +6,10 @@ data class WeatherState(
     val windspeedKmh: Double,
     val isDay: Boolean
 ) {
+    // roundToInt, not toInt — truncation displayed 20.9° as 20°
     fun temperatureDisplay(metric: Boolean): String =
-        if (metric) "${temperatureCelsius.toInt()}°C"
-        else "${celsiusToFahrenheit(temperatureCelsius).toInt()}°F"
+        if (metric) "${Math.round(temperatureCelsius)}°C"
+        else "${Math.round(celsiusToFahrenheit(temperatureCelsius))}°F"
 
     val conditionLabel: String get() = wmoCodeToLabel(weatherCode)
     val conditionIcon: String get() = wmoCodeToEmoji(weatherCode, isDay)

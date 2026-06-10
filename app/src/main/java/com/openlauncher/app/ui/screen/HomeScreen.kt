@@ -132,6 +132,7 @@ fun HomeScreen(
     onRadioCycleFm: () -> Unit = {},
     onRadioSwitchAm: () -> Unit = {},
     onRadioTune: (band: String, freq: Float) -> Unit = { _, _ -> },
+    onAssignRadio: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val accent       = Color(settings.accentColor)
@@ -148,7 +149,8 @@ fun HomeScreen(
         else         -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.08f)
     }
     val headerTextColor   = if (isDayMode) Color(0xFF111111) else accent
-    val statusIconColor   = if (isDayMode) Color(0xFF666666) else Color(0xFF666666)
+    val statusIconColor   = if (isDayMode) Color(0xFF444444) else Color(0xFF666666)
+    val controlIconColor  = if (isDayMode) Color(0xFF666666) else Color(0xFF444444)
 
     var resizingId    by remember { mutableStateOf<String?>(null) }
     var contextMenuId by remember { mutableStateOf<String?>(null) }
@@ -177,11 +179,11 @@ fun HomeScreen(
             )
             Spacer(Modifier.weight(1f))
             AnimatedVisibility(visible = isWifi, enter = fadeIn(), exit = fadeOut()) {
-                Icon(Icons.Default.Wifi, "WiFi", tint = Color(0xFF666666), modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.Wifi, "WiFi", tint = statusIconColor, modifier = Modifier.size(16.dp))
             }
             if (isWifi) Spacer(Modifier.width(6.dp))
             AnimatedVisibility(visible = isData, enter = fadeIn(), exit = fadeOut()) {
-                Icon(Icons.Default.SignalCellularAlt, "Data", tint = Color(0xFF666666), modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.SignalCellularAlt, "Data", tint = statusIconColor, modifier = Modifier.size(16.dp))
             }
             if (isLandscape) {
                 Spacer(Modifier.width(8.dp))
@@ -193,7 +195,7 @@ fun HomeScreen(
                         Icon(
                             imageVector        = Icons.Default.Dashboard,
                             contentDescription = "Widget library",
-                            tint               = Color(0xFF444444),
+                            tint               = controlIconColor,
                             modifier           = Modifier.size(15.dp)
                         )
                     }
@@ -206,7 +208,7 @@ fun HomeScreen(
                     Icon(
                         imageVector        = Icons.Default.Edit,
                         contentDescription = "Edit widgets",
-                        tint               = if (editMode) accent else Color(0xFF444444),
+                        tint               = if (editMode) accent else controlIconColor,
                         modifier           = Modifier.size(15.dp)
                     )
                 }
@@ -227,9 +229,13 @@ fun HomeScreen(
             val cellStepXPx = with(density) { (cellW + gap).toPx() }
             val cellStepYPx = with(density) { (cellH + gap).toPx() }
 
+            // WEATHER stays in the set even with no data: the commit path
+            // (LauncherViewModel.moveWidgetConfig) computes against settings flags
+            // only, so dropping it here would make the drop ghost and the committed
+            // layout disagree. With no data the cell renders fully transparent.
             val visibleIds = buildSet {
                 if (settings.showClock) add("CLOCK")
-                if (settings.showWeather && weather != null) add("WEATHER")
+                if (settings.showWeather) add("WEATHER")
                 if (settings.showNowPlaying) add("NOW_PLAYING")
                 if (settings.showTelemetry) add("TELEMETRY")
                 if (settings.showAltimeter) add("ALTIMETER")
@@ -318,6 +324,9 @@ fun HomeScreen(
                 // Original (pre-auto-expand) spanX needed for drag boundary clamping
                 val origSpanX  = visible.find { it.id == w.id }?.spanX ?: 1
                 val isDragging = draggingId == w.id
+                // Weather with no data reserves its cell but draws nothing
+                // (still visible in edit mode so it can be moved/removed)
+                val isGhost    = w.id == "WEATHER" && weather == null && !editMode
                 val dragDpX    = if (isDragging) with(density) { dragOffsetPx.x.toDp() } else 0.dp
                 val dragDpY    = if (isDragging) with(density) { dragOffsetPx.y.toDp() } else 0.dp
 
@@ -328,10 +337,14 @@ fun HomeScreen(
                         .size(width, height)
                         .zIndex(if (isDragging) 1f else 0f)
                         .clip(WIDGET_RADIUS)
-                        .background(widgetBg)
+                        .background(if (isGhost) Color.Transparent else widgetBg)
                         .border(
                             width = if (editMode) 1.5.dp else 1.dp,
-                            color = if (editMode) accent.copy(alpha = 0.45f) else widgetBorder,
+                            color = when {
+                                editMode -> accent.copy(alpha = 0.45f)
+                                isGhost  -> Color.Transparent
+                                else     -> widgetBorder
+                            },
                             shape = WIDGET_RADIUS
                         )
                         .combinedClickable(
@@ -343,6 +356,9 @@ fun HomeScreen(
                         .then(
                             if (editMode) Modifier.pointerInput(editMode, w.id, w.gridX, w.gridY) {
                                 var hasSignificantDrag = false
+                                // Touch-slop gate: without it, sub-pixel jitter during a
+                                // long-press counts as a drag and the context menu never opens
+                                val slop = viewConfiguration.touchSlop
                                 detectDragGesturesAfterLongPress(
                                     onDragStart = { _ ->
                                         draggingId         = w.id
@@ -352,7 +368,9 @@ fun HomeScreen(
                                     onDrag = { change, dragAmount ->
                                         change.consume()
                                         dragOffsetPx      += dragAmount
-                                        hasSignificantDrag = true
+                                        if (!hasSignificantDrag && dragOffsetPx.getDistance() > slop) {
+                                            hasSignificantDrag = true
+                                        }
                                     },
                                     onDragEnd = {
                                         if (hasSignificantDrag) {
@@ -410,7 +428,8 @@ fun HomeScreen(
                             onRadioSeekDown       = onRadioSeekDown,
                             onRadioCycleFm        = onRadioCycleFm,
                             onRadioSwitchAm       = onRadioSwitchAm,
-                            onRadioTune           = onRadioTune
+                            onRadioTune           = onRadioTune,
+                            onAssignRadio         = onAssignRadio
                         )
                         "TELEMETRY" -> TelemetryWidget(
                             location  = location,
@@ -459,6 +478,7 @@ fun HomeScreen(
 
                     // Label — hide when album art fills the widget background
                     val labelColor = when {
+                        isGhost -> Color.Transparent
                         w.id == "NOW_PLAYING" && nowPlaying?.albumArt != null && nowPlaying.title.isNotEmpty() -> Color.Transparent
                         isDayMode -> Color(0xFF999999)
                         else      -> Color(0xFF3A3A3A)
@@ -869,7 +889,7 @@ private fun WidgetLibraryDialog(
             if (!canAdd) {
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    text          = "ALL 6 CELLS OCCUPIED — REMOVE A WIDGET TO ADD MORE",
+                    text          = "ALL ${GRID_COLS * GRID_ROWS} CELLS OCCUPIED — REMOVE A WIDGET TO ADD MORE",
                     color         = if (isDayMode) Color(0xFFE03131) else Color(0xFF3A3A3A),
                     fontSize      = 8.sp,
                     letterSpacing = 1.sp,

@@ -98,6 +98,12 @@ class LocationCompassManager(context: Context) {
         }
         @Deprecated("Deprecated in Java")
         override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
+
+        // Must be overridden explicitly: the interface only gained default
+        // implementations in API 30, so omitting them throws AbstractMethodError
+        // on older head units when the GPS provider is toggled.
+        override fun onProviderEnabled(provider: String) {}
+        override fun onProviderDisabled(provider: String) {}
     }
 
     fun start() {

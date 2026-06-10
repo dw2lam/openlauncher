@@ -12,6 +12,8 @@
     <!-- GPS for telemetry and weather location -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Required for LocationManager.sendExtraCommand (A-GPS reset) — normal protection, auto-granted -->
+    <uses-permission android:name="android.permission.ACCESS_LOCATION_EXTRA_COMMANDS" />
 
     <!-- Compass / sensors -->
     <uses-permission android:name="android.permission.BODY_SENSORS" />

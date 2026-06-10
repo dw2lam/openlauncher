@@ -358,13 +358,28 @@ private fun playSoundPad(context: android.content.Context, pad: SoundPadConfig, 
         try {
             if (pad.audioUri.isNotEmpty()) {
                 val player = MediaPlayer()
-                player.setDataSource(context, android.net.Uri.parse(pad.audioUri))
-                player.prepare()
-                player.setOnCompletionListener { mp ->
-                    mp.release()
-                    onDone()
+                try {
+                    player.setDataSource(context, android.net.Uri.parse(pad.audioUri))
+                    player.setOnCompletionListener { mp ->
+                        mp.release()
+                        onDone()
+                    }
+                    // Async playback errors (revoked SAF grant, deleted file) must
+                    // also release the player and un-highlight the pad
+                    player.setOnErrorListener { mp, _, _ ->
+                        mp.release()
+                        onDone()
+                        true
+                    }
+                    // prepareAsync: a blocking prepare() on the main thread is an
+                    // ANR risk for content URIs on slow head-unit storage
+                    player.setOnPreparedListener { it.start() }
+                    player.prepareAsync()
+                } catch (e: Exception) {
+                    // Release on synchronous failure — this leaked a native player per failed tap
+                    runCatching { player.release() }
+                    throw e
                 }
-                player.start()
             } else {
                 var resName = pad.synthType.lowercase().trim()
                 var resId = context.resources.getIdentifier(resName, "raw", context.packageName)
@@ -383,6 +398,11 @@ private fun playSoundPad(context: android.content.Context, pad: SoundPadConfig, 
                         player.setOnCompletionListener { mp ->
                             mp.release()
                             onDone()
+                        }
+                        player.setOnErrorListener { mp, _, _ ->
+                            mp.release()
+                            onDone()
+                            true
                         }
                         player.start()
                     } else {
