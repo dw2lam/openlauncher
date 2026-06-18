@@ -275,7 +275,7 @@ fun MapWidget(
 
     // --- 2. FUNCIÓN DE ZOOM DINÁMICO ---
     fun getZoomByAccuracy(accuracyInMeters: Float?): Double {
-        if (accuracyInMeters == null || accuracyInMeters <= 0) return 17.5
+        if (accuracyInMeters == null || accuracyInMeters <= 0) return 15.0
             return when {
                 accuracyInMeters < 15f -> 17.5
                 accuracyInMeters < 50f -> 16.5
