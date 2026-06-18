@@ -388,6 +388,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             "com.apple.android.music",
             "org.videolan.vlc",
             "com.pandora.android",
+            "com.jetappfactory.jetaudio",
+            "com.maxmpz.audioplayer",
             "com.deezer.android"
         )
         for (pkg in candidates) {
