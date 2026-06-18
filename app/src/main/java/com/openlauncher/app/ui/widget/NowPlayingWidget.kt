@@ -904,7 +904,7 @@ private fun StandardMinimalPlayer(
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
-                            .size(50.dp)
+                            .size(54.dp)
                             .clip(CircleShape)
                             .background(currentPlayBgColor)
                             // Pasamos el click aquí. Si está editando, se deshabilita tanto el click como el efecto visual (ripple)
@@ -915,7 +915,7 @@ private fun StandardMinimalPlayer(
                                  contentDescription = if (nonNullState.isPlaying) "Pause" else "Play",
                                  tint = currentPlayIconColor,
                                  modifier = Modifier
-                                 .size(40.dp)
+                                 .size(44.dp)
                                  .offset(x = if (!nonNullState.isPlaying) -1.dp else 0.dp)
                             )
                         }
