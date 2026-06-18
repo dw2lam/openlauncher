@@ -114,11 +114,20 @@ class MediaListenerService : NotificationListenerService() {
         // every read, so a plain data-class compare would never match and every
         // notification would force a recomposition + art redraw.
         val prev = _nowPlaying.value
+
+        val sameSong =
+        prev?.title == title &&
+        prev.artist == artist
+
+        val sameArt =
+        prev?.artUri == artUri &&
+        artUri != null
+
         if (prev != null &&
             prev.controller?.sessionToken == controller.sessionToken &&
-            prev.title == title && prev.artist == artist &&
-            prev.isPlaying == isPlaying && prev.artUri == artUri &&
-            (prev.albumArt != null) == (art != null)
+            sameSong &&
+            prev.isPlaying == isPlaying &&
+            sameArt
         ) return
 
         _nowPlaying.value = NowPlayingState(
