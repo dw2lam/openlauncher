@@ -864,6 +864,7 @@ private fun WidgetLibraryDialog(
         if (settings.showVitals) add("VITALS")
         if (settings.showTripTracker) add("TRIP_TRACKER")
         if (settings.showSoundboard) add("SOUNDBOARD")
+        if (settings.showMap) add("MAP")
     }
     val canAdd = canAddWidget(settings)
 
