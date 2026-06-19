@@ -11,6 +11,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.openlauncher.app.model.WeatherState
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun WeatherWidget(
@@ -23,30 +25,44 @@ fun WeatherWidget(
     val contentColor = if (isDayMode) Color(0xFF111111) else MaterialTheme.colorScheme.onBackground
     val subColor     = if (isDayMode) Color(0xFF888888) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
 
+    val todayString = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+
+    // Corregido: cambiamos 'weather' por 'state'
+    val todayWeather = state?.forecastDays?.find { day -> day.date == todayString }
+
     Box(modifier = modifier) {
-        if (state != null) {
+        if (todayWeather != null) {
+
+            // Lógica inteligente de temperatura (Actual con WiFi / Promedio sin WiFi)
+            val tempAImprimir = if (state.currentTemperature != null) {
+                if (metric) "${Math.round(state.currentTemperature)}°C"
+                    else "${Math.round(state.currentTemperature * 9.0 / 5.0 + 32.0)}°F"
+            } else {
+                todayWeather.temperatureDisplay(metric)
+            }
+
             Column(
                 modifier            = Modifier.fillMaxSize().padding(start = 14.dp, bottom = 14.dp),
-                verticalArrangement = Arrangement.Bottom,
-                horizontalAlignment = Alignment.Start
+                   verticalArrangement = Arrangement.Bottom,
+                   horizontalAlignment = Alignment.Start
             ) {
                 Text(
-                    text     = state.conditionIcon,
-                    fontSize = 34.sp
+                    text     = todayWeather.conditionIcon,
+                     fontSize = 34.sp
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text       = state.temperatureDisplay(metric),
-                    color      = contentColor,
-                    fontSize   = 32.sp,
-                    fontWeight = FontWeight.Light,
-                    letterSpacing = 1.sp
+                    text       = tempAImprimir,
+                     color      = contentColor,
+                     fontSize   = 32.sp,
+                     fontWeight = FontWeight.Light,
+                     letterSpacing = 1.sp
                 )
                 Text(
-                    text          = state.conditionLabel.uppercase(),
-                    color         = subColor,
-                    fontSize      = 9.sp,
-                    letterSpacing = 1.sp
+                    text          = todayWeather.conditionLabel.uppercase(),
+                     color         = subColor,
+                     fontSize      = 9.sp,
+                     letterSpacing = 1.sp
                 )
             }
         }

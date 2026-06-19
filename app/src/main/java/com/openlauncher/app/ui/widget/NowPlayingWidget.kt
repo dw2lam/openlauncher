@@ -51,6 +51,8 @@ import kotlin.math.sin
 import com.openlauncher.app.model.WeatherState
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.openlauncher.app.viewmodel.LauncherViewModel
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun NowPlayingWidget(
@@ -263,6 +265,68 @@ fun WeatherWidgetAudio(
 
     val isMetric = settings.unitSystem.name == "METRIC"
 
+    val contentColor = if (isDayMode) Color(0xFF111111) else MaterialTheme.colorScheme.onBackground
+    val subColor     = if (isDayMode) Color(0xFF888888) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+
+    // Obtenemos la fecha de hoy del sistema
+    val todayString = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+
+    // Buscamos usando 'weather' (que es la variable real en este archivo)
+    val todayWeather = weather?.forecastDays?.find { day -> day.date == todayString }
+
+    // 3. Si se encuentra, pintamos el diseño
+    todayWeather?.let { today ->
+        // Si 'currentTemperature' no es nula (hay Wi-Fi), la formateamos directamente.
+        // Si es nula (Offline), llamamos a 'temperatureDisplay()' que calcula el promedio.
+        val tempAImprimir = if (weather?.currentTemperature != null) {
+            if (isMetric) "${Math.round(weather!!.currentTemperature!!)}°C"
+                else "${Math.round(weather!!.currentTemperature!! * 9.0 / 5.0 + 32.0)}°F"
+        } else {
+            todayWeather.temperatureDisplay(isMetric) // Promedio offline
+          }
+        Row(
+            modifier = modifier
+            .clip(RoundedCornerShape(60.dp))
+            .background(Color.Black.copy(alpha = 0.35f))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = todayWeather.conditionIcon,
+                 fontSize = 18.sp
+            )
+
+            Text(
+                text = tempAImprimir,
+                 color = contentColor,
+                 fontSize = 18.sp,
+                 fontWeight = FontWeight.Light
+            )
+
+            Text(
+                text = today.conditionLabel.uppercase(),
+                 color = subColor,
+                 fontSize = 9.sp,
+                 maxLines = 1
+            )
+        }
+    }
+}
+
+/*@Composable
+fun WeatherWidgetAudio(
+    accent: Color,
+    isDayMode: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val launcherViewModel: LauncherViewModel = viewModel()
+
+    val weather by launcherViewModel.weather.collectAsState()
+    val settings by launcherViewModel.settings.collectAsState()
+
+    val isMetric = settings.unitSystem.name == "METRIC"
+
     val contentColor =
     if (isDayMode) Color(0xFF111111)
         else MaterialTheme.colorScheme.onBackground
@@ -300,7 +364,7 @@ fun WeatherWidgetAudio(
                             )
                         }
                     }
-}
+} */
 
 
 /**
