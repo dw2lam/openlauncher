@@ -35,6 +35,10 @@ import com.openlauncher.app.util.LocationData
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import com.openlauncher.app.data.MapProvider
+import com.openlauncher.app.data.DailyData
+import com.google.gson.Gson
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 
 class LauncherViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -431,7 +435,6 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-
     // ── Weather ───────────────────────────────────────────────────────────────
     private val _weather = MutableStateFlow<WeatherState?>(null)
     val weather: StateFlow<WeatherState?> = _weather
@@ -441,28 +444,64 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     private var weatherJob: Job? = null
 
-    fun fetchWeather(lat: Double, lon: Double, metric: Boolean) {
-        weatherJob?.cancel()
-        weatherJob = viewModelScope.launch {
-            try {
-                // Always request celsius — the state stores celsius and the widget
-                // converts for display, so requesting fahrenheit just round-tripped
-                // the value through two lossy conversions
-                val resp = WeatherApi.service.getForecast(lat, lon, temperatureUnit = "celsius")
-                resp.currentWeather?.let { cw ->
-                    _weather.value = WeatherState(
-                        temperatureCelsius = cw.temperature,
-                        weatherCode       = cw.weathercode,
-                        windspeedKmh      = cw.windspeed,
-                        isDay             = cw.isDay == 1
-                    )
+        // CORREGIDO: Usamos 'application' en lugar de 'context'
+        private val sharedPrefs = application.getSharedPreferences("weather_cache", Context.MODE_PRIVATE)
+        private val gson = Gson()
+
+        fun fetchWeather(lat: Double, lon: Double, metric: Boolean) {
+            weatherJob?.cancel()
+            weatherJob = viewModelScope.launch {
+                try {
+                    // INTENTAR TRAER DE INTERNET (Hay Wi-Fi/Datos)
+                    val resp = WeatherApi.service.getForecast(lat, lon, temperatureUnit = "celsius")
+                    val daily = resp.dailyData
+
+                    if (daily != null) {
+                        val daysList = daily.dates.mapIndexed { index, date ->
+                            com.openlauncher.app.model.DailyForecast(
+                                date = date,
+                                maxTemperatureCelsius = daily.maxTemperatures.getOrNull(index) ?: 0.0,
+                                                                     minTemperatureCelsius = daily.minTemperatures.getOrNull(index) ?: 0.0,
+                                                                     weatherCode = daily.weatherCodes.getOrNull(index) ?: 0
+                            )
+                        }
+
+                        val nuevoEstado = com.openlauncher.app.model.WeatherState(
+                            forecastDays = daysList,
+                                isLoading = false,
+                                error = null
+                        )
+
+                        // Almacenamos en caché el JSON de los 7 días de forma asíncrona
+                        withContext(Dispatchers.IO) {
+                            val json = gson.toJson(nuevoEstado)
+                            sharedPrefs.edit().putString("cached_state", json).apply()
+                        }
+
+                        _weather.value = nuevoEstado
+                        _weatherError.value = null
+                    } // CORREGIDO: Se eliminó el caracter '/' sobrante que causaba el error de sintaxis
+                } catch (e: Exception) {
+                    // MODALIDAD OFFLINE: Si falla internet (no hay Wi-Fi), cargamos del caché
+                    val jsonGuardado = sharedPrefs.getString("cached_state", null)
+                    if (!jsonGuardado.isNullOrEmpty()) {
+                        // CORREGIDO: Casteo explícito seguro para evitar la confusión de GSON con Map.Entry
+                        val estadoRecuperado = gson.fromJson(jsonGuardado, com.openlauncher.app.model.WeatherState::class.java) as com.openlauncher.app.model.WeatherState
+
+                        // CORREGIDO: Reconstruimos el estado clonando únicamente los días para evitar invocar 'currentTemperature'
+                        _weather.value = com.openlauncher.app.model.WeatherState(
+                            forecastDays = estadoRecuperado.forecastDays,
+                                isLoading = false,
+                                error = null
+                        )
+                        _weatherError.value = null
+                    } else {
+                        _weatherError.value = e.message
+                    }
                 }
-                _weatherError.value = null
-            } catch (e: Exception) {
-                _weatherError.value = e.message
             }
         }
-    }
+
 
     // ── Location & Compass ────────────────────────────────────────────────────
     val location: StateFlow<LocationData?> = locationMgr.location
