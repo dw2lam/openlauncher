@@ -12,7 +12,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,144 +32,155 @@ fun TelemetryWidget(
     val cardinalMain = if (isDayMode) Color(0xFF555555) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
     val cardinalSub  = if (isDayMode) Color(0xFF888888) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
     val arrowColor   = if (isDayMode) Color(0xFF222222) else MaterialTheme.colorScheme.onBackground
-
-    // CAMBIO 1: Usamos Box como raíz para permitir superposición y centro absoluto
-    Box(
-        modifier = modifier.padding(horizontal = 14.dp, vertical = 12.dp)
+    Column(
+        modifier = modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.SpaceBetween
     ) {
-        // ── Compass ring — Centrado absolutamente ─────────────────────────────
+        // ── Compass ring — fills available space ─────────────────────────────
         BoxWithConstraints(
-            modifier         = Modifier.fillMaxSize(), // Ahora llena todo el contenedor
-                           contentAlignment = Alignment.Center
+            modifier         = Modifier.weight(1f).fillMaxWidth(),
+            contentAlignment = Alignment.Center
         ) {
-            // Reducimos un poco el multiplicador (ej. de 0.65f a 0.55f) para que el anillo
-            // no pise el texto de las coordenadas en pantallas pequeñas.
             val minDim = minOf(maxWidth, maxHeight)
-            val radius = minDim * 0.55f
+            val radius = minDim * 0.41f
+            // Capture for use inside nested lambdas
+            val capturedMaxWidth  = maxWidth
+            val capturedMaxHeight = maxHeight
 
-            val density = LocalDensity.current
-            val radiusPx = with(density) { radius.toPx() }
-
+            // Rotating layer: ring + cardinal labels spin opposite to bearing
             Box(
                 modifier         = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Box(
+                // Ring canvas rotates with -bearing
+                Canvas(
                     modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { rotationZ = -bearing },
+                        .fillMaxSize()
+                        .graphicsLayer { rotationZ = -bearing }
+                ) {
+                    val cx = size.width  / 2f
+                    val cy = size.height / 2f
+                    val r  = radius.toPx()
+
+                    drawCircle(
+                        color  = ringColor,
+                        radius = r,
+                        center = Offset(cx, cy),
+                        style  = Stroke(width = 1.5.dp.toPx())
+                    )
+                }
+
+                // Cardinal labels rotate with ring
+                Box(
+                    modifier         = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { rotationZ = -bearing },
                     contentAlignment = Alignment.Center
                 ) {
-                    // 1. Dibujamos el anillo
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val cx = size.width  / 2f
-                        val cy = size.height / 2f
-                        drawCircle(
-                            color  = ringColor,
-                            radius = radiusPx,
-                            center = Offset(cx, cy),
-                                   style  = Stroke(width = 1.5.dp.toPx())
-                        )
-                    }
-
-                    // 2. Posicionamiento Cardinal
-                    val labelOffset = radius - 12.dp
-
                     Text(
                         text     = "N",
-                         color    = cardinalMain,
-                         fontSize = 11.sp,
-                         modifier = Modifier.offset(y = -labelOffset)
+                        color    = cardinalMain,
+                        fontSize = 11.sp,
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = (capturedMaxHeight / 2 - radius - 6.dp).coerceAtLeast(0.dp))
                     )
                     Text(
                         text     = "S",
-                         color    = cardinalMain,
-                         fontSize = 11.sp,
-                         modifier = Modifier.offset(y = labelOffset)
+                        color    = cardinalMain,
+                        fontSize = 11.sp,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = (capturedMaxHeight / 2 - radius - 6.dp).coerceAtLeast(0.dp))
                     )
                     Text(
                         text     = "E",
-                         color    = cardinalSub,
-                         fontSize = 9.sp,
-                         modifier = Modifier.offset(x = labelOffset)
+                        color    = cardinalSub,
+                        fontSize = 9.sp,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .padding(end = (capturedMaxWidth / 2 - radius - 6.dp).coerceAtLeast(0.dp))
                     )
                     Text(
                         text     = "W",
-                         color    = cardinalSub,
-                         fontSize = 9.sp,
-                         modifier = Modifier.offset(x = -labelOffset)
+                        color    = cardinalSub,
+                        fontSize = 9.sp,
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .padding(start = (capturedMaxWidth / 2 - radius - 6.dp).coerceAtLeast(0.dp))
                     )
                 }
             }
 
-            // Fixed layer: Flecha estática
+            // Fixed layer: small arrow always points up + pivot circle
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val cx = size.width  / 2f
                 val cy = size.height / 2f
+                val r  = radius.toPx()
 
-                val arrowH = radiusPx * 0.22f
+                // Small fixed arrow pointing straight up
+                val arrowH = r * 0.20f
                 val arrowW = arrowH * 0.48f
-
                 drawPath(
                     path  = Path().apply {
-                        moveTo(cx, cy - arrowH)
-                        lineTo(cx + arrowW, cy + arrowH * 0.42f)
-                        lineTo(cx, cy + arrowH * 0.08f)
-                        lineTo(cx - arrowW, cy + arrowH * 0.42f)
+                        moveTo(cx, cy - arrowH)                   // tip
+                        lineTo(cx + arrowW, cy + arrowH * 0.42f) // bottom-right
+                        lineTo(cx, cy + arrowH * 0.08f)          // centre notch
+                        lineTo(cx - arrowW, cy + arrowH * 0.42f) // bottom-left
                         close()
                     },
                     color = arrowColor
                 )
 
+                // Hollow pivot circle
                 drawCircle(
                     color  = Color(0xFF777777),
-                           radius = 10.dp.toPx(),
-                           center = Offset(cx, cy),
-                           style  = Stroke(width = 1.5.dp.toPx())
+                    radius = 3.dp.toPx(),
+                    center = Offset(cx, cy),
+                    style  = Stroke(width = 1.5.dp.toPx())
                 )
             }
         }
 
+        Spacer(Modifier.height(10.dp))
+
         // ── Lat / Lon at the bottom ──────────────────────────────────────────
-        // CAMBIO 2: Alineamos esta fila abajo del Box usando Modifier.align
         Row(
-            modifier = Modifier
-            .fillMaxWidth()
-            .align(Alignment.BottomCenter),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.Bottom
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     text          = "LATITUDE",
-                     style         = MaterialTheme.typography.labelSmall,
-                     color         = subColor,
-                     letterSpacing = 1.sp,
-                     fontSize      = 7.sp
+                    style         = MaterialTheme.typography.labelSmall,
+                    color         = subColor,
+                    letterSpacing = 1.sp,
+                    fontSize      = 7.sp
                 )
                 Text(
                     text     = if (location != null) formatLat(location.latitude) else "—",
-                     color    = contentColor,
-                     fontSize = 11.sp
+                    color    = contentColor,
+                    fontSize = 11.sp
                 )
             }
             Column(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
-                   horizontalAlignment = Alignment.End
+                horizontalAlignment = Alignment.End
             ) {
                 Text(
                     text          = "LONGITUDE",
-                     style         = MaterialTheme.typography.labelSmall,
-                     color         = subColor,
-                     letterSpacing = 1.sp,
-                     fontSize      = 7.sp,
-                     textAlign     = TextAlign.End
+                    style         = MaterialTheme.typography.labelSmall,
+                    color         = subColor,
+                    letterSpacing = 1.sp,
+                    fontSize      = 7.sp,
+                    textAlign     = TextAlign.End
                 )
                 Text(
                     text      = if (location != null) formatLon(location.longitude) else "—",
-                     color     = contentColor,
-                     fontSize  = 11.sp,
-                     textAlign = TextAlign.End
+                    color     = contentColor,
+                    fontSize  = 11.sp,
+                    textAlign = TextAlign.End
                 )
             }
         }

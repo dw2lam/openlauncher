@@ -30,6 +30,10 @@ import androidx.core.graphics.drawable.toBitmap
 import com.openlauncher.app.model.AppInfo
 import com.openlauncher.app.ui.theme.LocalDayMode
 
+private enum class AppFilter { USER, SYSTEM, ALL }
+
+private val TILE_RADIUS = RoundedCornerShape(4.dp)
+
 @Composable
 fun AppLibraryScreen(
     apps: List<AppInfo>,
@@ -54,20 +58,20 @@ fun AppLibraryScreen(
     val fieldBorderU  = if (isDayMode) Color(0xFFCCCCCC) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f)
 
     val anyPickerMode = isPickerMode || isCarPlayPickerMode
-    var query by remember { mutableStateOf("") }
+    var query     by remember { mutableStateOf("") }
+    var appFilter by remember { mutableStateOf(AppFilter.USER) }
 
-    val filtered by remember(apps, query) {
-        derivedStateOf {
-            apps.filter { it.appName.contains(query, ignoreCase = true) }
+    val filtered = remember(apps, query, appFilter, anyPickerMode) {
+        val byName = if (query.isBlank()) apps
+                     else apps.filter { it.appName.contains(query, ignoreCase = true) }
+        // In picker mode always show everything so shortcuts can be set to any app
+        if (anyPickerMode) byName
+        else when (appFilter) {
+            AppFilter.USER   -> byName.filter { !it.isSystemApp }
+            AppFilter.SYSTEM -> byName.filter { it.isSystemApp }
+            AppFilter.ALL    -> byName
         }
     }
-/*
-    val filtered by remember(apps, query) {
-        derivedStateOf {
-            apps.filter { !it.isSystemApp }
-                .filter { it.appName.contains(query, ignoreCase = true) }
-        }
-    } */
 
     Column(modifier = modifier.fillMaxSize().background(screenBg)) {
         // ── Header ─────────────────────────────────────────────────────────────
@@ -89,7 +93,32 @@ fun AppLibraryScreen(
                 letterSpacing = 3.sp,
                 fontSize      = 14.sp
             )
-
+            if (!anyPickerMode) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    AppFilter.entries.forEach { filter ->
+                        FilterChip(
+                            selected = appFilter == filter,
+                            onClick  = { appFilter = filter },
+                            label    = {
+                                Text(
+                                    when (filter) {
+                                        AppFilter.USER   -> "Installed"
+                                        AppFilter.SYSTEM -> "System"
+                                        AppFilter.ALL    -> "All"
+                                    },
+                                    fontSize = 9.sp,
+                                    letterSpacing = 0.5.sp
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = accent,
+                                selectedLabelColor     = Color.Black,
+                                labelColor             = placeholderC
+                            )
+                        )
+                    }
+                }
+            }
             Spacer(Modifier.weight(1f))
             var searchFocused by remember { mutableStateOf(false) }
             Box(
@@ -142,9 +171,9 @@ fun AppLibraryScreen(
         // ── App grid ────────────────────────────────────────────────────────────
         LazyVerticalGrid(
             columns               = GridCells.Fixed(6),
-            contentPadding        = PaddingValues(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement   = Arrangement.spacedBy(12.dp),
+            contentPadding        = PaddingValues(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement   = Arrangement.spacedBy(4.dp),
             modifier              = Modifier.fillMaxSize()
         ) {
             items(filtered, key = { it.packageName }) { app ->
@@ -173,17 +202,16 @@ private fun AppTile(
     val isDayMode  = LocalDayMode.current
     val tileBg     = if (isDayMode) Color(0xFFFFFFFF) else Color(0xFF0B0B0B)
     val tileBorder = if (isDayMode) Color(0xFFCCCCCC) else Color(0xFF1A1A1A)
-    val tileShape  = MaterialTheme.shapes.medium
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
         modifier = Modifier
             .aspectRatio(1f)
-            .clip(tileShape)
+            .clip(TILE_RADIUS)
             .background(tileBg)
-            .border(1.dp, tileBorder, tileShape)
+            .border(1.dp, tileBorder, TILE_RADIUS)
             .clickable(onClick = onClick)
-            .padding(10.dp)
+            .padding(7.dp)
     ) {
         val bmp = remember(app.packageName) {
             try { app.icon.toBitmap(80, 80) } catch (_: Exception) { null }
@@ -192,14 +220,14 @@ private fun AppTile(
             androidx.compose.foundation.Image(
                 painter            = BitmapPainter(bmp.asImageBitmap()),
                 contentDescription = app.appName,
-                modifier           = Modifier.size(52.dp)
+                modifier           = Modifier.size(40.dp)
             )
         } else {
-            Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
-                Text(app.appName.take(1).uppercase(), color = accent, fontSize = 22.sp)
+            Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                Text(app.appName.take(1).uppercase(), color = accent, fontSize = 18.sp)
             }
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(4.dp))
         Text(
             text          = app.appName.uppercase(),
             style         = MaterialTheme.typography.labelSmall,
@@ -208,7 +236,7 @@ private fun AppTile(
             overflow      = TextOverflow.Ellipsis,
             textAlign     = TextAlign.Center,
             letterSpacing = 1.sp,
-            fontSize      = 10.sp
+            fontSize      = 8.sp
         )
     }
 }

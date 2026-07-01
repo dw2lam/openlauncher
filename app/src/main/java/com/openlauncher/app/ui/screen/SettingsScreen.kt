@@ -25,6 +25,7 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.openlauncher.app.data.AppFont
 import com.openlauncher.app.data.AppSettings
 import com.openlauncher.app.data.DayNightMode
 import com.openlauncher.app.data.SidebarPosition
@@ -46,8 +47,6 @@ fun SettingsScreen(
     accent: Color,
     onUpdate: (AppSettings.() -> AppSettings) -> Unit,
     onReset: () -> Unit,
-    onAssignAutostart: (Int) -> Unit,
-    onClearAutostart: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -65,7 +64,7 @@ fun SettingsScreen(
         uri?.let {
             runCatching {
                 context.contentResolver.takePersistableUriPermission(
-                    it, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    it, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
             }
             onUpdate { copy(wallpaperUri = it.toString()) }
@@ -341,48 +340,6 @@ fun SettingsScreen(
             }
         }
 
-        // ── Startup ──────────────────────────────────────────────────────────
-        SettingsSection("Startup") {
-            Column(modifier = Modifier.padding(bottom = 8.dp)) {
-                SettingsRow(
-                    label    = "Autostart Delay",
-                    sublabel = "${settings.autostartDelay} seconds — wait time before launching apps",
-                    icon     = Icons.Default.Timer
-                ) {}
-                Slider(
-                    value         = settings.autostartDelay.toFloat(),
-                    onValueChange = { onUpdate { copy(autostartDelay = it.toInt()) } },
-                    valueRange    = 2f..20f,
-                    steps         = 17,
-                    colors        = sliderColors(accent),
-                    modifier      = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-                )
-            }
-
-            SettingsDivider()
-
-            repeat(4) { index ->
-                val pkg = settings.autostartPackages.getOrNull(index).orEmpty()
-                if (index > 0) SettingsDivider()
-                SettingsButton(
-                    label    = "Autostart App ${index + 1}",
-                    sublabel = if (pkg.isNotEmpty()) "Launch $pkg on boot"
-                    else "No app selected",
-                    icon     = Icons.Default.Launch,
-                    accent   = accent,
-                    onClick  = { onAssignAutostart(index) }
-                )
-                if (pkg.isNotEmpty()) {
-                    TextButton(
-                        onClick  = { onClearAutostart(index) },
-                        modifier = Modifier.align(Alignment.End)
-                    ) {
-                        Text("CLEAR SLOT ${index + 1}", color = Color(0xFF993333), fontSize = 9.sp, letterSpacing = 1.sp)
-                    }
-                }
-            }
-        }
-
         // ── Sidebar Shortcuts ─────────────────────────────────────────────────
         SettingsSection("Sidebar") {
             settings.shortcuts.forEachIndexed { index, shortcut ->
@@ -504,7 +461,7 @@ fun SettingsScreen(
                             .clickable { showBgPicker = true }
                     )
                     if (settings.useGradient) {
-                        Icon(
+                        androidx.compose.material3.Icon(
                             Icons.Default.ArrowForward, null,
                             tint = if (isDayMode) Color(0xFF999999) else Color(0xFF555555), modifier = Modifier.size(14.dp)
                         )
@@ -639,6 +596,24 @@ fun SettingsScreen(
 
         // ── Typography ───────────────────────────────────────────────────────
         SettingsSection("Typography") {
+            SettingsRow(label = "Font", sublabel = fontDisplayName(settings.appFont), icon = Icons.Default.FontDownload) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    com.openlauncher.app.data.AppFont.entries.forEach { font ->
+                        FilterChip(
+                            selected = settings.appFont == font,
+                            onClick  = { onUpdate { copy(appFont = font) } },
+                            label    = { Text(fontDisplayName(font), fontSize = 9.sp, letterSpacing = 0.5.sp) },
+                            colors   = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = accent,
+                                selectedLabelColor     = Color.Black
+                            )
+                        )
+                    }
+                }
+            }
+
+            SettingsDivider()
+
             SettingsRow(label = "Bold Font", sublabel = "Heavier weight across all text", icon = Icons.Default.FormatBold) {
                 Switch(
                     checked         = settings.fontBold,
@@ -770,6 +745,20 @@ fun SettingsScreen(
             }
         }
 
+        // ── Updates ──────────────────────────────────────────────────────────
+        SettingsSection("Updates") {
+            SettingsButton(
+                label    = "Check for Updates",
+                sublabel = "View releases on GitHub",
+                icon     = Icons.Default.SystemUpdate,
+                accent   = accent,
+                onClick  = {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/dw2lam/openlauncher/releases"))
+                    context.startActivity(intent)
+                }
+            )
+        }
+
         // ── Maintenance ──────────────────────────────────────────────────────
         SettingsSection("Maintenance") {
             Spacer(Modifier.height(8.dp))
@@ -789,7 +778,7 @@ fun SettingsScreen(
         Spacer(Modifier.height(32.dp))
 
         Text(
-            text          = "v0.1  ·  Made by David Lam  ·  2026",
+            text          = "v0.0.5  ·  Made by David Lam  ·  2026",
             color         = if (isDayMode) Color(0xFFAAAAAA) else Color(0xFF2A2A2A),
             fontSize      = 10.sp,
             letterSpacing = 1.sp,
@@ -871,23 +860,18 @@ private fun SettingsSection(
 ) {
     val isDayMode     = LocalDayMode.current
     val sectionColor  = if (isDayMode) Color(0xFF888888) else Color(0xFF3A3A3A)
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 12.dp)
-            .clip(MaterialTheme.shapes.extraLarge)
-            .background(if (isDayMode) Color(0xFFF8F9FA) else Color(0xFF0A0A0A))
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
+    val dividerColor  = if (isDayMode) Color(0xFFCCCCCC) else Color(0xFF1E1E1E)
+    Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
         Text(
             text          = title.uppercase(),
-            style         = MaterialTheme.typography.titleSmall,
+            style         = MaterialTheme.typography.labelSmall,
             color         = sectionColor,
             letterSpacing = 2.sp,
-            modifier      = Modifier.padding(bottom = 12.dp)
+            modifier      = Modifier.padding(top = 16.dp, bottom = 6.dp)
         )
-        content()
+        HorizontalDivider(color = dividerColor)
+        Column(modifier = Modifier.fillMaxWidth(), content = content)
+        HorizontalDivider(color = dividerColor)
     }
 }
 
@@ -905,24 +889,15 @@ private fun SettingsRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
-            .padding(horizontal = 4.dp, vertical = 14.dp),
+            .padding(horizontal = 0.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(MaterialTheme.shapes.small)
-                .background(iconTint.copy(alpha = 0.1f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(icon, null, tint = iconTint, modifier = Modifier.size(20.dp))
-        }
-        Spacer(Modifier.width(16.dp))
+        Icon(icon, null, tint = iconTint, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.titleMedium, color = labelColor, fontSize = 15.sp)
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = labelColor, fontSize = 13.sp)
             if (sublabel.isNotEmpty())
-                Text(sublabel, style = MaterialTheme.typography.bodySmall, color = subColor, fontSize = 12.sp)
+                Text(sublabel, style = MaterialTheme.typography.labelSmall, color = subColor, fontSize = 11.sp)
         }
         content()
     }
@@ -944,37 +919,29 @@ private fun ColumnScope.SettingsButton(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
             .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = 14.dp),
+            .padding(horizontal = 0.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(MaterialTheme.shapes.small)
-                .background(iconTint.copy(alpha = 0.1f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(icon, null, tint = iconTint, modifier = Modifier.size(20.dp))
-        }
-        Spacer(Modifier.width(16.dp))
+        Icon(icon, null, tint = iconTint, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.titleMedium, color = labelColor, fontSize = 15.sp)
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = labelColor, fontSize = 13.sp)
             if (sublabel.isNotEmpty())
-                Text(sublabel, style = MaterialTheme.typography.bodySmall, color = subColor, fontSize = 12.sp)
+                Text(sublabel, style = MaterialTheme.typography.labelSmall, color = subColor, fontSize = 11.sp)
         }
-        Icon(Icons.Default.ChevronRight, null, tint = chevronC, modifier = Modifier.size(20.dp))
+        Icon(Icons.Default.ChevronRight, null, tint = chevronC, modifier = Modifier.size(16.dp))
     }
 }
 
 @Composable
 private fun ColumnScope.SettingsDivider() {
-    // Hidden in expressive mode as sections use card containers
+    val isDayMode = LocalDayMode.current
+    HorizontalDivider(color = if (isDayMode) Color(0xFFDDDDDD) else Color(0xFF141414))
 }
 
 @Composable
-private fun outlinedFieldColors(accent: Color): TextFieldColors {
+private fun outlinedFieldColors(accent: Color): androidx.compose.material3.TextFieldColors {
     val isDayMode = LocalDayMode.current
     val textColor = if (isDayMode) Color(0xFF111111) else Color.White
     val borderU   = if (isDayMode) Color(0xFFCCCCCC) else Color(0xFF2A2A2A)
@@ -990,7 +957,7 @@ private fun outlinedFieldColors(accent: Color): TextFieldColors {
 }
 
 @Composable
-private fun switchColors(accent: Color): SwitchColors {
+private fun switchColors(accent: Color): androidx.compose.material3.SwitchColors {
     val isDayMode = LocalDayMode.current
     return SwitchDefaults.colors(
         checkedThumbColor    = if (isDayMode) Color.White else Color.Black,
@@ -1002,11 +969,18 @@ private fun switchColors(accent: Color): SwitchColors {
 }
 
 @Composable
-private fun sliderColors(accent: Color): SliderColors {
+private fun sliderColors(accent: Color): androidx.compose.material3.SliderColors {
     val isDayMode = LocalDayMode.current
     return SliderDefaults.colors(
         thumbColor         = accent,
         activeTrackColor   = accent,
         inactiveTrackColor = if (isDayMode) Color(0xFFCCCCCC) else Color(0xFF2A2A2A)
     )
+}
+
+
+private fun fontDisplayName(font: AppFont): String = when (font) {
+    AppFont.SYSTEM          -> "System"
+    AppFont.JETBRAINS_MONO  -> "JetBrains Mono"
+    AppFont.SOURCE_CODE_PRO -> "Source Code Pro"
 }

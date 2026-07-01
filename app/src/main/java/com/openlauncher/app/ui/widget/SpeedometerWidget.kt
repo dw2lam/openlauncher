@@ -28,12 +28,7 @@ fun SpeedometerWidget(
     modifier: Modifier = Modifier
 ) {
     val maxSpeed     = if (isMetric) 200f else 124f
-    // Obtenemos la velocidad en metros por segundo (o 0 si es nula)
-    val rawSpeedMps = location?.speedMps ?: 0f
-    // Filtro de ruido: si es menor a 0.5 m/s (~1.8 km/h), asumimos que el carro está parado
-    val filteredSpeedMps = if (rawSpeedMps < 0.5f) 0f else rawSpeedMps
-    // Calculamos la velocidad final a mostrar usando el valor filtrado
-    val speedDisplay = (filteredSpeedMps * if (isMetric) 3.6f else 2.237f).coerceAtLeast(0f)
+    val speedDisplay = ((location?.speedMps ?: 0f) * if (isMetric) 3.6f else 2.237f).coerceAtLeast(0f)
     val unitLabel    = if (isMetric) "KM/H" else "MPH"
     val trackAlpha   = if (isDayMode) 0.18f else 0.07f
     val tickAlphaMaj = if (isDayMode) 0.50f else 0.28f
