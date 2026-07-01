@@ -39,10 +39,13 @@ I designed this launcher around that reality. It is built to be functional witho
 
 This project is currently in active development, but the core foundation is highly customizable:
 
-<img width="2400" height="896" alt="Screenshot_20260527-025436" src="https://github.com/user-attachments/assets/a1bc63f3-2d4e-4ac0-bd56-b5d181681658" />
-<img width="2400" height="896" alt="Screenshot_20260527-212602" src="https://github.com/user-attachments/assets/cf319144-0a06-4bc6-ab83-855ef8514a9c" />
-<img width="2400" height="896" alt="Screenshot_20260527-025446" src="https://github.com/user-attachments/assets/cc038c53-dcf5-4b4b-bd73-bfcd18bd82d2" />
-<img width="2400" height="896" alt="Screenshot_20260527-025451" src="https://github.com/user-attachments/assets/cc038c53-dcf5-4b4b-bd73-bfcd18bd82d2" />
+![Settings](Screenshots/settings.png?raw=true "Settings")
+
+![Home](Screenshots/home.png?raw=true "Home")
+
+![Home_white](Screenshots/home_white.png?raw=true "Home White")
+
+![applibrary](Screenshots/applibrary.png?raw=true "applibrary")
 
 ### 🧩 Modular Widget Grid
 The home screen is a fully drag-and-drop, resize-capable grid. Every widget pane can be moved, scaled, and stacked however you want. Nothing is locked to a fixed position. Add and remove widgets from the built-in library at any time.

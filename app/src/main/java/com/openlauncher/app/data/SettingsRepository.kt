@@ -28,7 +28,6 @@ class SettingsRepository(private val context: Context) {
         val UI_SCALE           = floatPreferencesKey("ui_scale")
         val CLOCK_STYLE        = stringPreferencesKey("clock_style")
         val UNIT_SYSTEM        = stringPreferencesKey("unit_system")
-        val APP_FONT           = stringPreferencesKey("app_font")
         val SHOW_WEATHER       = booleanPreferencesKey("show_weather")
         val SHOW_CLOCK         = booleanPreferencesKey("show_clock")
         val SHOW_TELEMETRY     = booleanPreferencesKey("show_telemetry")
@@ -59,6 +58,12 @@ class SettingsRepository(private val context: Context) {
         val SPEEDOMETER_DIGITAL_ONLY = booleanPreferencesKey("speedometer_digital_only")
         val GRADIENT_DIRECTION    = stringPreferencesKey("gradient_direction")
         val USE_CUSTOM_BG_COLOR   = booleanPreferencesKey("use_custom_bg_color")
+        val SHOW_MAP      = booleanPreferencesKey("show_map")
+        val MAP_PROVIDER  = stringPreferencesKey("map_provider")
+        val MAP_TYPE      = stringPreferencesKey("map_type")
+        val SHOW_TRAFFIC  = booleanPreferencesKey("show_traffic")
+        val AUTOSTART_PACKAGES_JSON = stringPreferencesKey("autostart_packages_json")
+        val AUTOSTART_DELAY = intPreferencesKey("autostart_delay")
     }
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data
@@ -100,7 +105,6 @@ class SettingsRepository(private val context: Context) {
                 uiScale        = prefs[Keys.UI_SCALE]         ?: defaults.uiScale,
                 clockStyle     = prefs[Keys.CLOCK_STYLE]?.let { runCatching { ClockStyle.valueOf(it) }.getOrNull() } ?: defaults.clockStyle,
                 unitSystem     = prefs[Keys.UNIT_SYSTEM]?.let { runCatching { UnitSystem.valueOf(it) }.getOrNull() } ?: defaults.unitSystem,
-                appFont        = prefs[Keys.APP_FONT]?.let { runCatching { AppFont.valueOf(it) }.getOrNull() } ?: defaults.appFont,
                 showWeather    = prefs[Keys.SHOW_WEATHER]     ?: defaults.showWeather,
                 showClock      = prefs[Keys.SHOW_CLOCK]       ?: defaults.showClock,
                 showTelemetry  = prefs[Keys.SHOW_TELEMETRY]   ?: defaults.showTelemetry,
@@ -128,13 +132,23 @@ class SettingsRepository(private val context: Context) {
                 showSoundboard   = prefs[Keys.SHOW_SOUNDBOARD]   ?: defaults.showSoundboard,
                 soundboardPads   = prefs[Keys.SOUNDBOARD_PADS_JSON]?.let {
                     runCatching {
-                        gson.fromJson<List<SoundPadConfig>>(it, object : com.google.gson.reflect.TypeToken<List<SoundPadConfig>>() {}.type)
+                        gson.fromJson<List<SoundPadConfig>>(it, object : TypeToken<List<SoundPadConfig>>() {}.type)
                     }.getOrNull()
                 } ?: defaults.soundboardPads,
                 vitalsAsBars     = prefs[Keys.VITALS_AS_BARS] ?: defaults.vitalsAsBars,
                 speedometerDigitalOnly = prefs[Keys.SPEEDOMETER_DIGITAL_ONLY] ?: defaults.speedometerDigitalOnly,
                 gradientDirection = prefs[Keys.GRADIENT_DIRECTION]?.let { runCatching { GradientDirection.valueOf(it) }.getOrNull() } ?: defaults.gradientDirection,
-                useCustomBackgroundColor = prefs[Keys.USE_CUSTOM_BG_COLOR] ?: defaults.useCustomBackgroundColor
+                useCustomBackgroundColor = prefs[Keys.USE_CUSTOM_BG_COLOR] ?: defaults.useCustomBackgroundColor,
+                showMap      = prefs[Keys.SHOW_MAP] ?: defaults.showMap,
+                mapProvider  = prefs[Keys.MAP_PROVIDER]?.let { runCatching { MapProvider.valueOf(it) }.getOrNull() } ?: defaults.mapProvider,
+                mapType      = prefs[Keys.MAP_TYPE]?.let { runCatching { MapType.valueOf(it) }.getOrNull() } ?: defaults.mapType,
+                showTraffic  = prefs[Keys.SHOW_TRAFFIC] ?: defaults.showTraffic,
+                autostartPackages = prefs[Keys.AUTOSTART_PACKAGES_JSON]?.let {
+                    runCatching {
+                        gson.fromJson<List<String>>(it, object : TypeToken<List<String>>() {}.type)
+                    }.getOrNull()
+                } ?: listOfNotNull(prefs[stringPreferencesKey("autostart_package")]),
+                autostartDelay = prefs[Keys.AUTOSTART_DELAY] ?: defaults.autostartDelay
             )
     }
 
@@ -161,7 +175,6 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.UI_SCALE]           = s.uiScale
             prefs[Keys.CLOCK_STYLE]        = s.clockStyle.name
             prefs[Keys.UNIT_SYSTEM]        = s.unitSystem.name
-            prefs[Keys.APP_FONT]           = s.appFont.name
             prefs[Keys.SHOW_WEATHER]       = s.showWeather
             prefs[Keys.SHOW_CLOCK]         = s.showClock
             prefs[Keys.SHOW_TELEMETRY]     = s.showTelemetry
@@ -191,6 +204,12 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.SPEEDOMETER_DIGITAL_ONLY] = s.speedometerDigitalOnly
             prefs[Keys.GRADIENT_DIRECTION] = s.gradientDirection.name
             prefs[Keys.USE_CUSTOM_BG_COLOR] = s.useCustomBackgroundColor
+            prefs[Keys.SHOW_MAP]      = s.showMap
+            prefs[Keys.MAP_PROVIDER]  = s.mapProvider.name
+            prefs[Keys.MAP_TYPE]      = s.mapType.name
+            prefs[Keys.SHOW_TRAFFIC]  = s.showTraffic
+            prefs[Keys.AUTOSTART_PACKAGES_JSON] = gson.toJson(s.autostartPackages)
+            prefs[Keys.AUTOSTART_DELAY] = s.autostartDelay
     }
 
     suspend fun resetToDefaults() {

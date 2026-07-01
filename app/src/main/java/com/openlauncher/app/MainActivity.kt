@@ -14,7 +14,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
@@ -69,14 +71,35 @@ class MainActivity : ComponentActivity() {
             val weather     by vm.weather.collectAsStateWithLifecycle()
             val location    by vm.location.collectAsStateWithLifecycle()
             val bearing     by vm.compassBearing.collectAsStateWithLifecycle()
-            val isWifi      by vm.isWifi.collectAsStateWithLifecycle()
-            val isData      by vm.isData.collectAsStateWithLifecycle()
+            val wifiLevel   by vm.wifiLevel.collectAsStateWithLifecycle()
+            val mobileLevel by vm.mobileLevel.collectAsStateWithLifecycle()
             val isDayModeVM by vm.isDayMode.collectAsStateWithLifecycle()
             val hardwareRadio by vm.hardwareRadio.collectAsStateWithLifecycle()
             val systemIsDark = isSystemInDarkTheme()
             val isDayMode = if (settings.dayNightMode == DayNightMode.SYSTEM) !systemIsDark else isDayModeVM
             val pickerSlot      by vm.shortcutPickerSlot.collectAsStateWithLifecycle()
             val appPickerTarget by vm.appPickerTarget.collectAsStateWithLifecycle()
+
+            var editMode by remember { mutableStateOf(false) }
+            var widgetLibraryOpen by remember { mutableStateOf(false) }
+
+            var autostartLaunched by rememberSaveable { mutableStateOf(false) }
+            LaunchedEffect(settingsLoaded) {
+                if (settingsLoaded && !autostartLaunched) {
+                    val appsToLaunch = settings.autostartPackages.filter { it.isNotEmpty() }
+                    if (appsToLaunch.isNotEmpty()) {
+                        // Use user-defined delay (default 2s, range 2-20s)
+                        delay(settings.autostartDelay * 1000L)
+                        
+                        appsToLaunch.forEach { pkg ->
+                            vm.launchApp(pkg)
+                            // Small gap between multiple app launches to avoid intent collisions
+                            delay(500)
+                        }
+                        autostartLaunched = true
+                    }
+                }
+            }
 
             val accent         = Color(settings.accentColor)
             val bg             = if (settings.useCustomBackgroundColor) {
@@ -111,7 +134,6 @@ class MainActivity : ComponentActivity() {
                     textColor  = textColor,
                     fontBold   = settings.fontBold,
                     textScale  = settings.textScale,
-                    appFont    = settings.appFont,
                     isDayMode  = isDayMode,
                     useCustomBg = settings.useCustomBackgroundColor
                 ) {
@@ -141,7 +163,7 @@ class MainActivity : ComponentActivity() {
                         }
 
                         val isBottomBar    = settings.sidebarPosition == SidebarPosition.BOTTOM
-                        val layoutDivColor = if (isDayMode) Color(0xFFCCCCCC) else Color(0xFF1A1A1A)
+                        val layoutDivColor = if (isDayMode) Color(0xFFCCCCCC) else Color(0xFF000000)
 
                         val sidebarContent: @Composable () -> Unit = {
                             val sidebarDensity = Density(
@@ -171,7 +193,12 @@ class MainActivity : ComponentActivity() {
                                     onShortcutLongPress  = { slot -> vm.startShortcutPicker(slot) },
                                     onShortcutRemove     = { slot -> vm.removeShortcut(slot) },
                                     onShortcutSetIcon    = { slot, icon -> vm.setShortcutIcon(slot, icon) },
-                                    onReorder            = { from, to -> vm.reorderShortcut(from, to) }
+                                    onReorder            = { from, to -> vm.reorderShortcut(from, to) },
+                                    wifiLevel            = wifiLevel,
+                                    mobileLevel          = mobileLevel,
+                                    editMode             = editMode,
+                                    onToggleEditMode     = { editMode = !editMode },
+                                    onOpenWidgetLibrary  = { widgetLibraryOpen = true }
                                 )
                             }
                         }
@@ -194,10 +221,8 @@ class MainActivity : ComponentActivity() {
                                         nowPlaying          = nowPlaying,
                                         location            = location,
                                         bearing             = bearing,
-                                        isWifi              = isWifi,
-                                        isData              = isData,
                                         isDayMode           = isDayMode,
-                                        onPlayPause         = vm::playPause,
+                                        onPlayPause         = { vm.playPause(this@MainActivity) },
                                         onNext              = vm::skipNext,
                                         onPrev              = vm::skipPrev,
                                         onLaunchCarPlay     = { vm.launchApp(settings.carPlayPackage) },
@@ -212,6 +237,7 @@ class MainActivity : ComponentActivity() {
                                         onTapNowPlaying     = {
                                             val pkg = nowPlaying?.controller?.packageName
                                             if (!pkg.isNullOrEmpty()) vm.launchApp(pkg)
+                                            vm.playLastOrOpenActive(this@MainActivity)
                                         },
                                         onUpdateWidget      = { id, sx, sy -> vm.updateWidgetConfig(id, sx, sy) },
                                         onMoveWidget        = { id, gx, gy -> vm.moveWidgetConfig(id, gx, gy) },
@@ -229,7 +255,14 @@ class MainActivity : ComponentActivity() {
                                         onRadioCycleFm        = { vm.radioCycleFm() },
                                         onRadioSwitchAm       = { vm.radioSwitchAm() },
                                         onRadioTune           = { band, freq -> vm.radioTune(band, freq) },
-                                        onAssignRadio         = { vm.startRadioPicker() }
+                                        onAssignRadio         = { vm.startRadioPicker() },
+                                        onToggleMapProvider = { vm.toggleMapProvider() },
+                                        onToggleTraffic     = { vm.toggleTraffic() },
+                                        onSetMapType        = { vm.setMapType(it) },
+                                        editMode            = editMode,
+                                        onToggleEditMode    = { editMode = !editMode },
+                                        widgetLibraryOpen   = widgetLibraryOpen,
+                                        onSetWidgetLibraryOpen = { widgetLibraryOpen = it }
                                     )
 
                                     NavDestination.APP_LIBRARY -> AppLibraryScreen(
@@ -239,9 +272,13 @@ class MainActivity : ComponentActivity() {
                                         pickerSlot          = pickerSlot,
                                         isCarPlayPickerMode = appPickerTarget != null,
                                         carPlayPickerLabel  = when (appPickerTarget) {
-                                            com.openlauncher.app.viewmodel.LauncherViewModel.AppPickerTarget.ANDROID_AUTO -> "CHOOSE ANDROID AUTO APP"
-                                            com.openlauncher.app.viewmodel.LauncherViewModel.AppPickerTarget.PIP          -> "CHOOSE PIP APP"
-                                            com.openlauncher.app.viewmodel.LauncherViewModel.AppPickerTarget.RADIO        -> "CHOOSE RADIO APP"
+                                            LauncherViewModel.AppPickerTarget.ANDROID_AUTO -> "CHOOSE ANDROID AUTO APP"
+                                            LauncherViewModel.AppPickerTarget.PIP          -> "CHOOSE PIP APP"
+                                            LauncherViewModel.AppPickerTarget.RADIO        -> "CHOOSE RADIO APP"
+                                            LauncherViewModel.AppPickerTarget.AUTOSTART_1 -> "CHOOSE AUTOSTART APP 1"
+                                            LauncherViewModel.AppPickerTarget.AUTOSTART_2 -> "CHOOSE AUTOSTART APP 2"
+                                            LauncherViewModel.AppPickerTarget.AUTOSTART_3 -> "CHOOSE AUTOSTART APP 3"
+                                            LauncherViewModel.AppPickerTarget.AUTOSTART_4 -> "CHOOSE AUTOSTART APP 4"
                                             else -> "CHOOSE CARPLAY APP"
                                         },
                                         accent              = accent,
@@ -254,7 +291,9 @@ class MainActivity : ComponentActivity() {
                                         settings = settings,
                                         accent   = accent,
                                         onUpdate = { block -> vm.updateSettings(block) },
-                                        onReset  = { vm.resetSettings() }
+                                        onReset  = { vm.resetSettings() },
+                                        onAssignAutostart = { slot -> vm.startAutostartPicker(slot) },
+                                        onClearAutostart = { slot -> vm.clearAutostartApp(slot) }
                                     )
                                 }
                             }

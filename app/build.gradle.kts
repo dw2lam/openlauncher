@@ -13,8 +13,8 @@ android {
         applicationId  = "com.openlauncher.app"
         minSdk         = 21
         targetSdk      = 36
-        versionCode    = 6
-        versionName    = "0.0.5"
+        versionCode    = 8
+        versionName    = "1.1"
     }
 
     buildTypes {
@@ -77,6 +77,9 @@ dependencies {
 
     // JSON serialization
     implementation("com.google.code.gson:gson:2.13.1")
+
+    // Maps
+    implementation("org.osmdroid:osmdroid-android:6.1.18")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

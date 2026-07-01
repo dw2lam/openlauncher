@@ -17,7 +17,6 @@ import kotlinx.coroutines.delay
 import java.util.*
 import kotlin.math.cos
 import kotlin.math.sin
-
 import androidx.compose.material3.MaterialTheme
 
 @Composable
@@ -39,7 +38,11 @@ fun ClockWidget(
     val contentColor = if (isDayMode) Color(0xFF111111) else MaterialTheme.colorScheme.onBackground
     val subColor     = if (isDayMode) Color(0xFF888888) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
 
-    Box(modifier = modifier) {
+    // Alignment.Center para que se posicione en medio
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
         when (style) {
             ClockStyle.DIGITAL -> DigitalClock(calendar, contentColor, subColor)
             ClockStyle.ANALOG  -> AnalogClock(calendar, accent, isDayMode)
@@ -52,22 +55,24 @@ private fun DigitalClock(cal: Calendar, contentColor: Color, subColor: Color) {
     val hour   = cal.get(Calendar.HOUR_OF_DAY)
     val minute = cal.get(Calendar.MINUTE)
 
+    // Cambiado a Arrangement.Center y Alignment.CenterHorizontally
     Column(
-        modifier            = Modifier.fillMaxSize().padding(start = 14.dp, bottom = 14.dp),
-        verticalArrangement = Arrangement.Bottom,
-        horizontalAlignment = Alignment.Start
+        modifier            = Modifier.fillMaxSize(),
+           verticalArrangement = Arrangement.Center,
+           horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             text          = "%02d:%02d".format(hour, minute),
-            color         = contentColor,
-            fontSize      = 48.sp,
-            fontWeight    = androidx.compose.ui.text.font.FontWeight.Light,
-            letterSpacing = 1.sp
+             color         = contentColor,
+             fontSize      = 48.sp,
+             fontWeight    = androidx.compose.ui.text.font.FontWeight.Light,
+             letterSpacing = 1.sp
         )
+        Spacer(modifier = Modifier.height(4.dp)) // Un pequeño espacio limpio entre hora y fecha
         Text(
             text     = buildDateString(cal),
-            color    = subColor,
-            fontSize = 12.sp
+             color    = subColor,
+             fontSize = 12.sp
         )
     }
 }
@@ -93,7 +98,7 @@ private fun AnalogClock(cal: Calendar, accent: Color, isDayMode: Boolean = false
                 color  = ringColor,
                 radius = radius,
                 center = Offset(cx, cy),
-                style  = Stroke(1.dp.toPx())
+                       style  = Stroke(1.dp.toPx())
             )
 
             // Tick marks — minimal, hairline
@@ -113,9 +118,9 @@ private fun AnalogClock(cal: Calendar, accent: Color, isDayMode: Boolean = false
                         else      -> if (isDayMode) Color(0xFFCCCCCC) else Color(0xFF2E2E2E)
                     },
                     start       = Offset(cx + cos(angle) * radius * inner, cy + sin(angle) * radius * inner),
-                    end         = Offset(cx + cos(angle) * radius * 0.96f, cy + sin(angle) * radius * 0.96f),
-                    strokeWidth = if (isQuarter) 1.5.dp.toPx() else 0.8.dp.toPx(),
-                    cap         = StrokeCap.Round
+                         end         = Offset(cx + cos(angle) * radius * 0.96f, cy + sin(angle) * radius * 0.96f),
+                         strokeWidth = if (isQuarter) 1.5.dp.toPx() else 0.8.dp.toPx(),
+                         cap         = StrokeCap.Round
                 )
             }
 
@@ -124,9 +129,9 @@ private fun AnalogClock(cal: Calendar, accent: Color, isDayMode: Boolean = false
             drawLine(
                 color       = accent,
                 start       = Offset(cx - cos(hAngle) * radius * 0.14f, cy - sin(hAngle) * radius * 0.14f),
-                end         = Offset(cx + cos(hAngle) * radius * 0.50f, cy + sin(hAngle) * radius * 0.50f),
-                strokeWidth = 3.dp.toPx(),
-                cap         = StrokeCap.Round
+                     end         = Offset(cx + cos(hAngle) * radius * 0.50f, cy + sin(hAngle) * radius * 0.50f),
+                     strokeWidth = 3.dp.toPx(),
+                     cap         = StrokeCap.Round
             )
 
             // Minute hand
@@ -134,19 +139,19 @@ private fun AnalogClock(cal: Calendar, accent: Color, isDayMode: Boolean = false
             drawLine(
                 color       = minuteHandColor,
                 start       = Offset(cx - cos(mAngle) * radius * 0.14f, cy - sin(mAngle) * radius * 0.14f),
-                end         = Offset(cx + cos(mAngle) * radius * 0.74f, cy + sin(mAngle) * radius * 0.74f),
-                strokeWidth = 1.5.dp.toPx(),
-                cap         = StrokeCap.Round
+                     end         = Offset(cx + cos(mAngle) * radius * 0.74f, cy + sin(mAngle) * radius * 0.74f),
+                     strokeWidth = 1.5.dp.toPx(),
+                     cap         = StrokeCap.Round
             )
 
             // Second hand — accent, hairline
             val sAngle = ((second / 60f) * 2 * Math.PI - Math.PI / 2).toFloat()
             drawLine(
                 color       = accent.copy(alpha = 0.75f),
-                start       = Offset(cx - cos(sAngle) * radius * 0.22f, cy - sin(sAngle) * radius * 0.22f),
-                end         = Offset(cx + cos(sAngle) * radius * 0.88f, cy + sin(sAngle) * radius * 0.88f),
-                strokeWidth = 0.8.dp.toPx(),
-                cap         = StrokeCap.Round
+                     start       = Offset(cx - cos(sAngle) * radius * 0.22f, cy - sin(sAngle) * radius * 0.22f),
+                     end         = Offset(cx + cos(sAngle) * radius * 0.88f, cy + sin(sAngle) * radius * 0.88f),
+                     strokeWidth = 0.8.dp.toPx(),
+                     cap         = StrokeCap.Round
             )
 
             // Center pivot
@@ -154,20 +159,20 @@ private fun AnalogClock(cal: Calendar, accent: Color, isDayMode: Boolean = false
             drawCircle(
                 color  = accent,
                 radius = 2.5.dp.toPx(),
-                center = Offset(cx, cy),
-                style  = Stroke(1.dp.toPx())
+                       center = Offset(cx, cy),
+                       style  = Stroke(1.dp.toPx())
             )
         }
 
         // Date inset — centered, above 6 o'clock position like a real watch
         Text(
             text      = shortDateString(cal),
-            color     = if (isDayMode) Color(0xFF999999) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
-            fontSize  = 9.sp,
-            letterSpacing = 1.5.sp,
-            modifier  = Modifier
-                .align(Alignment.Center)
-                .padding(bottom = 44.dp)
+             color     = if (isDayMode) Color(0xFF999999) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
+             fontSize  = 9.sp,
+             letterSpacing = 1.5.sp,
+             modifier  = Modifier
+             .align(Alignment.Center)
+             .padding(top = 44.dp) // SOLUCIÓN: Cambiado de bottom a top para que baje simulando un reloj clásico
         )
     }
 }

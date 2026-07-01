@@ -44,6 +44,29 @@ import com.openlauncher.app.model.NowPlayingState
 import com.openlauncher.app.service.MediaListenerService
 import kotlin.math.abs
 import kotlinx.coroutines.delay
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import kotlin.math.sin
+import com.openlauncher.app.model.WeatherState
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.openlauncher.app.viewmodel.LauncherViewModel
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import androidx.compose.ui.graphics.Brush
+
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeJoin
+
+
+
 
 @Composable
 fun NowPlayingWidget(
@@ -60,7 +83,7 @@ fun NowPlayingWidget(
     modifier: Modifier = Modifier,
     isEditing: Boolean = false,
     isDayMode: Boolean = false,
-    hardwareRadio: com.openlauncher.app.viewmodel.LauncherViewModel.HardwareRadioState? = null,
+    hardwareRadio: LauncherViewModel.HardwareRadioState? = null,
     onLaunchHardwareRadio: () -> Unit = {},
     onStopHardwareRadio: () -> Unit = {},
     onRadioSeekUp: () -> Unit = {},
@@ -184,6 +207,136 @@ fun NowPlayingWidget(
     }
 }
 
+@Composable
+private fun WaveProgressIndicator(
+    progress: Float,
+    color: Color,
+    trackColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "WaveTransition")
+
+    val phaseShift by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2f * Math.PI).toFloat(), animationSpec = infiniteRepeatable(animation = tween(durationMillis = 1500, easing = LinearEasing)), label = "WavePhase"
+    )
+
+    Canvas(modifier = modifier) {
+        val centerY = size.height / 2f
+        val progressX = size.width * progress
+
+        // Línea gris restante
+        drawLine(
+            color = trackColor,
+            start = Offset(progressX, centerY),
+                 end = Offset(size.width, centerY),
+                 strokeWidth = 3.dp.toPx(),
+                 cap = StrokeCap.Round
+        )
+
+        // Onda con movimiento inverso
+        if (progressX > 0f) {
+            val amplitude = 4.dp.toPx()
+            val wavelength = 24.dp.toPx()
+            val step = 2.dp.toPx()
+
+            val wavePath = Path().apply {
+                moveTo(0f, centerY)
+                var x = 0f
+                while (x <= progressX) {
+                    // Esto hace que los frentes de onda viajen desde el indicador hacia el inicio (atrás)
+                    val y = centerY + amplitude * sin(((x / wavelength) * (2f * Math.PI).toFloat()) + phaseShift)
+                    lineTo(x, y)
+                    x += step
+                }
+                // Asegurar el cierre exacto en la posición de la burbuja
+                val finalY = centerY + amplitude * sin(((progressX / wavelength) * (2f * Math.PI).toFloat()) + phaseShift)
+                lineTo(progressX, finalY)
+            }
+
+            drawPath(
+                path = wavePath,
+                color = color,
+                style = Stroke(
+                    width = 3.dp.toPx(),
+                               cap = StrokeCap.Round,
+                               join = StrokeJoin.Round
+                )
+            )
+
+            // Indicador (Círculo naranja) acoplado a la onda revertida
+            val indicatorY = centerY + amplitude * sin(((progressX / wavelength) * (2f * Math.PI).toFloat()) + phaseShift)
+
+            drawCircle(
+                color = color,
+                radius = 5.dp.toPx(),
+                       center = Offset(progressX, indicatorY)
+            )
+        }
+    }
+}
+
+@Composable
+fun WeatherWidgetAudio(
+    accent: Color,
+    isDayMode: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val launcherViewModel: LauncherViewModel = viewModel()
+
+    val weather by launcherViewModel.weather.collectAsState()
+    val settings by launcherViewModel.settings.collectAsState()
+
+    val isMetric = settings.unitSystem.name == "METRIC"
+
+    val contentColor = Color.White
+    val subColor     = Color(0xFF888888)
+
+    // Obtenemos la fecha de hoy del sistema
+    val todayString = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+
+    // Buscamos usando 'weather' (que es la variable real en este archivo)
+    val todayWeather = weather?.forecastDays?.find { day -> day.date == todayString }
+
+    // 3. Si se encuentra, pintamos el diseño
+    todayWeather?.let { today ->
+        // Si 'currentTemperature' no es nula (hay Wi-Fi), la formateamos directamente.
+        // Si es nula (Offline), llamamos a 'temperatureDisplay()' que calcula el promedio.
+        val tempAImprimir = if (weather?.currentTemperature != null) {
+            if (isMetric) "${Math.round(weather!!.currentTemperature!!)}°C"
+                else "${Math.round(weather!!.currentTemperature!! * 9.0 / 5.0 + 32.0)}°F"
+        } else {
+            todayWeather.temperatureDisplay(isMetric) // Promedio offline
+          }
+        Row(
+            modifier = modifier
+            .clip(RoundedCornerShape(60.dp))
+            .background(Color.Black.copy(alpha = 0.50f))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = todayWeather.conditionIcon,
+                 fontSize = 18.sp
+            )
+
+            Text(
+                text = tempAImprimir,
+                 color = contentColor,
+                 fontSize = 18.sp,
+                 fontWeight = FontWeight.Light
+            )
+
+            Text(
+                text = today.conditionLabel.uppercase(),
+                 color = subColor,
+                 fontSize = 9.sp,
+                 maxLines = 1
+            )
+        }
+    }
+}
 
 /**
  * Radio deck backed by a REAL tuner only — either the vendor MCU (full control,
@@ -196,7 +349,7 @@ fun NowPlayingWidget(
 private fun RadioDeck(
     accent: Color,
     isDayMode: Boolean,
-    hardwareRadio: com.openlauncher.app.viewmodel.LauncherViewModel.HardwareRadioState?,
+    hardwareRadio: LauncherViewModel.HardwareRadioState?,
     onLaunchHardwareRadio: () -> Unit,
     onStopHardwareRadio: () -> Unit,
     onRadioSeekUp: () -> Unit,
@@ -537,6 +690,18 @@ private fun StandardMinimalPlayer(
     val subTextColor = if (isDayMode) Color(0xFF666666) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.30f)
 
     Box(modifier = modifier) {
+        // Transparent clickable background overlay (underneath controls) to open the player
+        if (!isEditing) {
+            Box(
+                modifier = Modifier
+                .fillMaxSize()
+                .clickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                           indication = null
+                ) { onTapToOpenApp() }
+            )
+        }
+
         if (!hasContent) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -566,7 +731,7 @@ private fun StandardMinimalPlayer(
                             }
                         }
                         if (hasCarPlay && hasAutoApp) {
-                            androidx.compose.material3.VerticalDivider(
+                            VerticalDivider(
                                 modifier = Modifier.fillMaxHeight().padding(vertical = 16.dp),
                                 color = if (isDayMode) Color(0xFFBBBBBB) else Color(0xFF1E1E1E)
                             )
@@ -590,18 +755,51 @@ private fun StandardMinimalPlayer(
                         }
                     }
                 } else {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    Box(
+                        modifier = Modifier.fillMaxSize() .clickable { onTapToOpenApp() },
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.MusicNote, null, tint = idleIconColor, modifier = Modifier.size(24.dp))
-                        Text("NO MEDIA PLAYING", color = idleTextColor, fontSize = 7.sp, letterSpacing = 1.sp)
+                        // IMAGEN DE FONDO DESDE RES (no_music.png)
+                        androidx.compose.foundation.Image(
+                            painter = androidx.compose.ui.res.painterResource(
+                                id = if (isDayMode) com.openlauncher.app.R.drawable.no_music_w else com.openlauncher.app.R.drawable.no_music
+                            ),
+                            contentDescription = "No Cover Art",
+                            modifier = Modifier.fillMaxSize(),
+                                                          contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                                          alpha = 0.95f
+                        )
+
+                        // (Botón de Play y Texto)
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+
+                            Text(
+                                text = "TAP TO PLAY MUSIC",
+                                 color = contentTextColor,
+                                 fontSize = 9.sp,
+                                 letterSpacing = 1.5.sp,
+                                 fontWeight = FontWeight.Bold,
+                                 modifier = Modifier.padding(top = 120.dp)
+                            )
+                        }
                     }
                 }
             }
         } else {
             // Non-null playing track state
             val nonNullState = state!!
+            val artworkModel by remember(
+                nonNullState.artUri,
+                nonNullState.title,
+                nonNullState.artist
+            ) {
+                mutableStateOf(
+                    nonNullState.artUri ?: nonNullState.albumArt
+                )
+            }
             var positionMs by remember { mutableLongStateOf(nonNullState.controller?.playbackState?.position ?: 0L) }
             val durationMs = nonNullState.controller?.metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
 
@@ -619,10 +817,10 @@ private fun StandardMinimalPlayer(
             val currentTextColor = if (hasAlbumArt) Color.White else if (isDayMode) Color(0xFF111111) else MaterialTheme.colorScheme.onBackground
             val currentSubTextColor = if (hasAlbumArt) Color.White.copy(alpha = 0.6f) else if (isDayMode) Color(0xFF666666) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
             val currentProgressColor = if (useDarkTheme) accent else if (isDayMode) Color(0xFF111111) else accent
-            val currentProgressTrack = currentTextColor.copy(alpha = 0.15f)
+            val currentProgressTrack = currentTextColor.copy(alpha = 0.35f)
             val currentIconColor = currentTextColor.copy(alpha = 0.75f)
             val currentPlayBgColor = if (useDarkTheme) accent.copy(alpha = 0.9f) else if (isDayMode) Color(0xFF111111) else accent.copy(alpha = 0.9f)
-            val currentPlayIconColor = if (useDarkTheme) Color.Black else Color.White
+            val currentPlayIconColor = if (useDarkTheme) Color.White else Color.Black
 
             if (hasAlbumArt) {
                 // Prefer the full-resolution art URI when the source app provides
@@ -631,7 +829,7 @@ private fun StandardMinimalPlayer(
                 // to the bitmap if the URI fails to load, and renders with high
                 // filter quality so upscaling stays smooth either way.
                 coil.compose.AsyncImage(
-                    model = nonNullState.artUri ?: nonNullState.albumArt,
+                    model = artworkModel,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     filterQuality = androidx.compose.ui.graphics.FilterQuality.High,
@@ -640,13 +838,30 @@ private fun StandardMinimalPlayer(
                     },
                     modifier = Modifier.fillMaxSize()
                 )
-                // 25% dimming layer overlay
+                // Gradient dimming layer overlay (10% top -> 25% middle -> 75% bottom)
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.25f))
+                    .fillMaxSize()
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.00f), // Arriba: Casi transparente
+                                            Color.Black.copy(alpha = 0.25f), // En medio: Oscurecimiento leve
+                                            Color.Black.copy(alpha = 0.75f)  // Abajo: Muy oscuro para controles/texto
+                            )
+                        )
+                    )
                 )
             }
+
+            // Informacion del clima
+            WeatherWidgetAudio(
+                accent = accent,
+                isDayMode = isDayMode,
+                modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(start = 14.dp, top = 8.dp)
+            )
 
             Column(
                 modifier = Modifier
@@ -661,32 +876,42 @@ private fun StandardMinimalPlayer(
                         .padding(top = 16.dp)
                         .let { if (!isEditing) it.clickable { onTapToOpenApp() } else it }
                 ) {
-                    Text(
-                        text = nonNullState.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = currentTextColor,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        fontSize = 14.sp
-                    )
-                    Text(
-                        text = nonNullState.artist.ifEmpty { "Unknown" },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = currentSubTextColor,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        fontSize = 11.sp
-                    )
+
                 }
 
                 // Progress + controls (bottom)
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // Track info (top — clickable to open app)
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                text = nonNullState.title,
+                                 style = MaterialTheme.typography.titleMedium,
+                                 color = currentTextColor,
+                                 maxLines = 1,
+                                 overflow = TextOverflow.Ellipsis,
+                                 fontSize = 14.sp
+                            )
+
+                            Text(
+                                text = nonNullState.artist.ifEmpty { "Unknown" },
+                                 style = MaterialTheme.typography.bodySmall,
+                                 color = currentSubTextColor,
+                                 maxLines = 1,
+                                 overflow = TextOverflow.Ellipsis,
+                                 fontSize = 11.sp
+                            )
+                        }
+
                     if (durationMs > 0) {
-                        LinearProgressIndicator(
-                            progress = { (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) },
-                            modifier = Modifier.fillMaxWidth().height(2.dp),
-                            color = currentProgressColor,
-                            trackColor = currentProgressTrack
+                        WaveProgressIndicator(
+                            progress = (positionMs.toFloat() / durationMs).coerceIn(0f, 1f),
+                                              color = currentProgressColor,
+                                              trackColor = currentProgressTrack,
+                                              modifier = Modifier
+                                              .fillMaxWidth()
+                                              .height(14.dp)
                         )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -702,27 +927,47 @@ private fun StandardMinimalPlayer(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        IconButton(onClick = { if (!isEditing) onPrev() }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.SkipPrevious, "Prev", tint = currentIconColor, modifier = Modifier.size(20.dp))
-                        }
+                        // button Prev
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .size(42.dp)
-                                .clip(CircleShape)
-                                .background(currentPlayBgColor)
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color.White.copy(alpha = 0.18f))
+                            .clickable(enabled = !isEditing) { onPrev() }
                         ) {
-                            IconButton(onClick = { if (!isEditing) onPlayPause() }, modifier = Modifier.size(42.dp)) {
-                                Icon(
-                                    imageVector = if (nonNullState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    contentDescription = if (nonNullState.isPlaying) "Pause" else "Play",
-                                    tint = currentPlayIconColor,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
+                            Icon(Icons.Default.SkipPrevious, "Prev", tint = currentIconColor, modifier = Modifier.size(30.dp))
                         }
-                        IconButton(onClick = { if (!isEditing) onNext() }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.SkipNext, "Next", tint = currentIconColor, modifier = Modifier.size(20.dp))
+
+                        // button play and pause
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                            .size(54.dp)
+                            .clip(CircleShape)
+                            .background(currentPlayBgColor)
+                            // Pasamos el click aquí. Si está editando, se deshabilita tanto el click como el efecto visual (ripple)
+                            .clickable(enabled = !isEditing) { onPlayPause() }
+                        ) {
+                            Icon(
+                                imageVector = if (nonNullState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                 contentDescription = if (nonNullState.isPlaying) "Pause" else "Play",
+                                 tint = currentPlayIconColor,
+                                 modifier = Modifier
+                                 .size(44.dp)
+                                 .offset(x = if (!nonNullState.isPlaying) -1.dp else 0.dp)
+                            )
+                        }
+                        // button Next
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color.White.copy(alpha = 0.18f))
+                            .clickable(enabled = !isEditing) { onNext() }
+                        ) {
+                            Icon(Icons.Default.SkipNext, "Next", tint = currentIconColor, modifier = Modifier.size(30.dp))
                         }
                     }
                 }
