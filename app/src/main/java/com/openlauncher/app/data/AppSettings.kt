@@ -71,6 +71,8 @@ data class AppSettings(
     val fontBold: Boolean = false,
     val textScale: Float = 1.2f,
     val uiScale: Float = 1.0f,
+    // Scales the sidebar bar thickness, slots and icons (1.5 = 150%).
+    val sidebarScale: Float = 1.5f,
     val clockStyle: ClockStyle = ClockStyle.DIGITAL,
     val unitSystem: UnitSystem = UnitSystem.METRIC,
     val appFont: AppFont = AppFont.JETBRAINS_MONO,

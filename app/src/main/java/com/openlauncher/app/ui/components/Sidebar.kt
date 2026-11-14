@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -42,8 +43,10 @@ import com.openlauncher.app.model.NavDestination
 import com.openlauncher.app.ui.theme.LocalDayMode
 import kotlin.math.roundToInt
 
-private val ICON_SIZE   = 22.dp
-private val SLOT_SIZE   = 52.dp
+private val ICON_SIZE        = 22.dp
+private val NATIVE_ICON_SIZE = 26.dp
+private val SLOT_SIZE        = 52.dp
+private val BAR_THICKNESS    = 56.dp
 
 @Composable
 fun Sidebar(
@@ -65,7 +68,14 @@ fun Sidebar(
     val iconInactive = if (isDayMode) Color(0xFF777777) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.3f)
     val dividerColor = if (isDayMode) Color(0xFFCCCCCC) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.08f)
     val density      = LocalDensity.current
-    val slotSizePx   = with(density) { SLOT_SIZE.toPx() }
+    // Sidebar-only scale so the bar and its icons can be enlarged independently
+    // of the global UI scale (which is deliberately damped for the sidebar).
+    val scale            = settings.sidebarScale.coerceIn(0.8f, 2.5f)
+    val iconSize         = ICON_SIZE * scale
+    val nativeIconSize   = NATIVE_ICON_SIZE * scale
+    val slotSize         = SLOT_SIZE * scale
+    val barThickness     = BAR_THICKNESS * scale
+    val slotSizePx       = with(density) { slotSize.toPx() }
 
     var actionSheetSlot by remember { mutableStateOf<Int?>(null) }
     var iconPickerSlot  by remember { mutableStateOf<Int?>(null) }
@@ -101,6 +111,9 @@ fun Sidebar(
                 isDragging      = isDragging,
                 dragTranslation = translation,
                 isHorizontal    = isHorizontal,
+                iconSize        = iconSize,
+                nativeIconSize  = nativeIconSize,
+                slotSize        = slotSize,
                 onClick         = { onShortcutClick(index) },
                 onLongPress     = {
                     if (shortcut.packageName.isNotEmpty()) {
@@ -133,6 +146,8 @@ fun Sidebar(
             accent       = accent,
             iconInactive = iconInactive,
             isHorizontal = isHorizontal,
+            iconSize     = iconSize,
+            slotSize     = slotSize,
             onClick      = { onNavigate(NavDestination.APP_LIBRARY) }
         )
         NavButton(
@@ -142,6 +157,8 @@ fun Sidebar(
             accent       = accent,
             iconInactive = iconInactive,
             isHorizontal = isHorizontal,
+            iconSize     = iconSize,
+            slotSize     = slotSize,
             onClick      = { onNavigate(NavDestination.SETTINGS) }
         )
         NavButton(
@@ -151,6 +168,8 @@ fun Sidebar(
             accent       = accent,
             iconInactive = iconInactive,
             isHorizontal = isHorizontal,
+            iconSize     = iconSize,
+            slotSize     = slotSize,
             onClick      = { onNavigate(NavDestination.HOME) }
         )
     }
@@ -159,17 +178,18 @@ fun Sidebar(
         Box(
             modifier = modifier
                 .fillMaxWidth()
-                .height(56.dp)
+                .height(barThickness)
                 .background(sidebarBg)
         ) {
             // Shortcuts centred, inset past the edge-pinned nav buttons and
             // scrollable — an unbounded row ran beneath the nav buttons and off
-            // both screen edges once enough slots were added
+            // both screen edges once enough slots were added. The inset tracks
+            // the scaled slot width (three buttons are pinned per edge).
             Row(
                 modifier = Modifier
                     .align(Alignment.Center)
                     .fillMaxHeight()
-                    .padding(horizontal = 150.dp)
+                    .padding(horizontal = slotSize * 3)
                     .horizontalScroll(rememberScrollState()),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -184,20 +204,20 @@ fun Sidebar(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (!settings.bottomBarShortcutsRight) {
-                    NavButton(Icons.Default.Home,     "Home",     currentDest == NavDestination.HOME,        accent, iconInactive, true) { onNavigate(NavDestination.HOME) }
-                    NavButton(Icons.Default.Settings, "Settings", currentDest == NavDestination.SETTINGS,    accent, iconInactive, true) { onNavigate(NavDestination.SETTINGS) }
-                    NavButton(Icons.Default.Apps,     "Apps",     currentDest == NavDestination.APP_LIBRARY, accent, iconInactive, true) { onNavigate(NavDestination.APP_LIBRARY) }
+                    NavButton(Icons.Default.Home,     "Home",     currentDest == NavDestination.HOME,        accent, iconInactive, true, iconSize, slotSize) { onNavigate(NavDestination.HOME) }
+                    NavButton(Icons.Default.Settings, "Settings", currentDest == NavDestination.SETTINGS,    accent, iconInactive, true, iconSize, slotSize) { onNavigate(NavDestination.SETTINGS) }
+                    NavButton(Icons.Default.Apps,     "Apps",     currentDest == NavDestination.APP_LIBRARY, accent, iconInactive, true, iconSize, slotSize) { onNavigate(NavDestination.APP_LIBRARY) }
                 } else {
-                    NavButton(Icons.Default.Apps,     "Apps",     currentDest == NavDestination.APP_LIBRARY, accent, iconInactive, true) { onNavigate(NavDestination.APP_LIBRARY) }
-                    NavButton(Icons.Default.Settings, "Settings", currentDest == NavDestination.SETTINGS,    accent, iconInactive, true) { onNavigate(NavDestination.SETTINGS) }
-                    NavButton(Icons.Default.Home,     "Home",     currentDest == NavDestination.HOME,        accent, iconInactive, true) { onNavigate(NavDestination.HOME) }
+                    NavButton(Icons.Default.Apps,     "Apps",     currentDest == NavDestination.APP_LIBRARY, accent, iconInactive, true, iconSize, slotSize) { onNavigate(NavDestination.APP_LIBRARY) }
+                    NavButton(Icons.Default.Settings, "Settings", currentDest == NavDestination.SETTINGS,    accent, iconInactive, true, iconSize, slotSize) { onNavigate(NavDestination.SETTINGS) }
+                    NavButton(Icons.Default.Home,     "Home",     currentDest == NavDestination.HOME,        accent, iconInactive, true, iconSize, slotSize) { onNavigate(NavDestination.HOME) }
                 }
             }
         }
     } else {
         Column(
             modifier = modifier
-                .width(56.dp)
+                .width(barThickness)
                 .fillMaxHeight()
                 .background(sidebarBg),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -263,12 +283,16 @@ private fun ShortcutSlot(
     isDragging: Boolean,
     dragTranslation: Float,
     isHorizontal: Boolean,
+    iconSize: Dp,
+    nativeIconSize: Dp,
+    slotSize: Dp,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
     onDragStart: () -> Unit,
     onDragDelta: (Float) -> Unit,
     onDragEnd: () -> Unit
 ) {
+    val density = LocalDensity.current
     val currentOnClick      by rememberUpdatedState(onClick)
     val currentOnLongPress  by rememberUpdatedState(onLongPress)
     val currentOnDragStart  by rememberUpdatedState(onDragStart)
@@ -279,8 +303,8 @@ private fun ShortcutSlot(
         contentAlignment = Alignment.Center,
         modifier = Modifier
             .then(
-                if (isHorizontal) Modifier.fillMaxHeight().width(SLOT_SIZE)
-                else              Modifier.fillMaxWidth().height(SLOT_SIZE)
+                if (isHorizontal) Modifier.fillMaxHeight().width(slotSize)
+                else              Modifier.fillMaxWidth().height(slotSize)
             )
             .zIndex(if (isDragging) 1f else 0f)
             .graphicsLayer {
@@ -335,18 +359,22 @@ private fun ShortcutSlot(
                     imageVector        = override.toIcon(),
                     contentDescription = shortcut.label,
                     tint               = iconInactive,
-                    modifier           = Modifier.size(ICON_SIZE)
+                    modifier           = Modifier.size(iconSize)
                 )
             }
             resolvedIcon != null -> {
                 // Cache per icon — every slot recomposes each drag frame, and an
-                // un-remembered toBitmap allocated a fresh bitmap per slot per frame
-                val bmp = remember(resolvedIcon) { resolvedIcon.toBitmap(44, 44) }
+                // un-remembered toBitmap allocated a fresh bitmap per slot per frame.
+                // Render at the scaled display size so larger sidebar icons stay sharp.
+                val bmp = remember(resolvedIcon, nativeIconSize, density) {
+                    val px = with(density) { nativeIconSize.toPx() }.roundToInt().coerceIn(48, 256)
+                    resolvedIcon.toBitmap(px, px)
+                }
                 Icon(
                     painter            = BitmapPainter(bmp.asImageBitmap()),
                     contentDescription = shortcut.label,
                     tint               = Color.Unspecified,
-                    modifier           = Modifier.size(26.dp)
+                    modifier           = Modifier.size(nativeIconSize)
                 )
             }
             shortcut.isDefault -> {
@@ -354,7 +382,7 @@ private fun ShortcutSlot(
                     imageVector        = shortcut.defaultIcon.toIcon(),
                     contentDescription = shortcut.label,
                     tint               = iconInactive,
-                    modifier           = Modifier.size(ICON_SIZE)
+                    modifier           = Modifier.size(iconSize)
                 )
             }
             else -> {
@@ -362,7 +390,7 @@ private fun ShortcutSlot(
                     imageVector        = Icons.Default.Add,
                     contentDescription = "Add shortcut",
                     tint               = if (LocalDayMode.current) Color(0xFFBBBBBB) else Color(0xFF252525),
-                    modifier           = Modifier.size(ICON_SIZE)
+                    modifier           = Modifier.size(iconSize)
                 )
             }
         }
@@ -495,6 +523,8 @@ private fun NavButton(
     accent: Color,
     iconInactive: Color,
     isHorizontal: Boolean = false,
+    iconSize: Dp = ICON_SIZE,
+    slotSize: Dp = SLOT_SIZE,
     onClick: () -> Unit
 ) {
     val isDayMode = LocalDayMode.current
@@ -504,8 +534,8 @@ private fun NavButton(
         contentAlignment = Alignment.Center,
         modifier = Modifier
             .then(
-                if (isHorizontal) Modifier.fillMaxHeight().width(SLOT_SIZE)
-                else              Modifier.fillMaxWidth().height(SLOT_SIZE)
+                if (isHorizontal) Modifier.fillMaxHeight().width(slotSize)
+                else              Modifier.fillMaxWidth().height(slotSize)
             )
             .background(if (isActive) activeBg else Color.Transparent)
             .clickable(onClick = onClick)
@@ -514,7 +544,7 @@ private fun NavButton(
             imageVector        = icon,
             contentDescription = label,
             tint               = if (isActive) activeIconColor else iconInactive,
-            modifier           = Modifier.size(ICON_SIZE)
+            modifier           = Modifier.size(iconSize)
         )
     }
 }
